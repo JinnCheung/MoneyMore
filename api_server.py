@@ -7,6 +7,7 @@ MoneyMore RESTful API 服务
 
 import os
 import json
+import socket
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -27,6 +28,27 @@ tsp.set_token(os.getenv('TUSHARE_TOKEN'))
 # API 版本
 API_VERSION = 'v1'
 API_PREFIX = f'/api/{API_VERSION}'
+
+
+def is_port_available(port):
+    """检查端口是否可用"""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(1)
+            result = sock.connect_ex(('localhost', port))
+            return result != 0
+    except Exception:
+        return False
+
+
+def find_available_port(start_port):
+    """从指定端口开始查找可用端口"""
+    port = start_port
+    while port < start_port + 100:  # 最多尝试100个端口
+        if is_port_available(port):
+            return port
+        port += 1
+    raise RuntimeError(f"无法找到可用端口（从 {start_port} 开始）")
 
 
 def handle_api_error(func):
@@ -424,9 +446,23 @@ if __name__ == '__main__':
         print("错误: 请设置 TUSHARE_TOKEN 环境变量")
         exit(1)
     
+    # 获取默认端口
+    default_port = int(os.getenv('API_PORT', 5000))
+    
+    # 查找可用端口
+    try:
+        available_port = find_available_port(default_port)
+        if available_port != default_port:
+            print(f"警告: 默认端口 {default_port} 被占用，使用端口 {available_port}")
+    except RuntimeError as e:
+        print(f"错误: {e}")
+        exit(1)
+    
     print("MoneyMore API 服务启动中...")
     print(f"API 版本: {API_VERSION}")
     print(f"API 前缀: {API_PREFIX}")
+    print(f"默认端口: {default_port}")
+    print(f"使用端口: {available_port}")
     print("可用接口:")
     print(f"  - 股票行情: {API_PREFIX}/stock_data")
     print(f"  - 分红数据: {API_PREFIX}/dividend")
@@ -435,6 +471,6 @@ if __name__ == '__main__':
     print(f"  - 交易日历: {API_PREFIX}/trade_cal")
     print(f"  - 财务指标: {API_PREFIX}/fina_indicator")
     print(f"  - 财报披露计划: {API_PREFIX}/disclosure_date")
-    print("\n服务器启动在 http://localhost:5001")
+    print(f"\n服务器启动在 http://localhost:{available_port}")
     
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    app.run(host='0.0.0.0', port=available_port, debug=True)

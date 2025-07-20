@@ -16,11 +16,17 @@ pip install -r requirements.txt
 
 ### 2. 配置环境变量
 
-创建 `.env` 文件并设置 Tushare Token：
+创建 `.env` 文件并设置 Tushare Token 和 API 端口：
 
 ```bash
 TUSHARE_TOKEN=your_tushare_token_here
+API_PORT=5000
 ```
+
+**端口配置说明**：
+- `API_PORT`：API 服务的默认端口，默认为 5000
+- 如果指定端口被占用，服务会自动尝试下一个可用端口
+- 最多尝试 100 个端口（从默认端口开始）
 
 ### 3. 启动 API 服务
 
@@ -28,16 +34,17 @@ TUSHARE_TOKEN=your_tushare_token_here
 python api_server.py
 ```
 
-服务将在 `http://localhost:5000` 启动。
+服务将在配置的端口启动（默认 `http://localhost:5000`，如端口被占用会自动使用下一个可用端口）。
 
 ## API 接口文档
 
 ### 基础信息
 
-- **Base URL**: `http://localhost:5000`
+- **Base URL**: `http://localhost:{port}` （端口由 .env 文件中的 API_PORT 指定，默认 5000）
 - **API 版本**: `v1`
 - **API 前缀**: `/api/v1`
 - **响应格式**: JSON
+- **端口策略**: 自动检测端口占用，如默认端口被占用会自动使用下一个可用端口
 
 ### 通用响应格式
 
