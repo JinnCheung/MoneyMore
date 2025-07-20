@@ -1,0 +1,36 @@
+{
+  "name": "MoneyMore Agent",
+  "description": "MoneyMore 项目专用智能体",
+  "base_agent": "builder",
+  "custom_instructions": {
+    "language": "中文",
+    "comment_language": "中文",
+    "python_execution": {
+      "use_virtual_environment": true,
+      "virtual_environment_path": "venv",
+      "activation_command": "source venv/bin/activate"
+    },
+    "coding_standards": {
+      "comments": "所有代码注释和文档必须使用中文",
+      "variable_naming": "使用有意义的中文拼音或英文变量名",
+      "function_documentation": "函数和类的文档字符串使用中文"
+    },
+    "execution_rules": [
+      "执行 Python 文件时必须先激活虚拟环境",
+      "所有 pip 安装命令使用虚拟环境中的 pip",
+      "运行 Python 脚本时使用虚拟环境中的 Python 解释器"
+    ]
+  },
+  "tools": {
+    "python_runner": {
+      "default_command": "source venv/bin/activate && python",
+      "pip_command": "source venv/bin/activate && pip"
+    }
+  },
+  "project_context": {
+    "name": "MoneyMore",
+    "type": "Python项目",
+    "virtual_environment": "venv",
+    "python_version": "3.11"
+  }
+}
