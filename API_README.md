@@ -301,7 +301,7 @@ fetch('http://localhost:5000/api/v1/stock_data?ts_code=000001.SZ&start_date=2024
 
 ```bash
 # 开发模式启动（自动重载）
-python api_server.py
+python app.py
 ```
 
 ### 查看日志
@@ -321,7 +321,7 @@ API 服务会在控制台输出详细的请求日志和错误信息。
 如需添加新的接口，可以参考现有接口的实现模式：
 
 1. 在 `tushare_parquet/core.py` 中添加新的缓存函数
-2. 在 `api_server.py` 中添加对应的 Flask 路由
+2. 在 `api/server.py` 中添加对应的 Flask 路由
 3. 使用 `@handle_api_error` 装饰器处理错误
 4. 使用 `format_response()` 函数格式化响应
 5. 更新本文档

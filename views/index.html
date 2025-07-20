@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>长江电力 K线图 - MoneyMore</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>长江电力(600900.SH) K线图</h1>
+            <p>数据来源：MoneyMore API | 基于 tushare_parquet</p>
+        </div>
+        
+        <div class="chart-container">
+            <div id="klineChart"></div>
+        </div>
+        
+        <div class="info">
+            <p><strong>说明：</strong></p>
+            <ul>
+                <li>红色/绿色蜡烛图表示股价涨跌</li>
+                <li>鼠标悬停可查看详细数据</li>
+                <li>可使用鼠标滚轮缩放，拖拽平移</li>
+                <li>数据更新时间：<span id="updateTime"></span></li>
+            </ul>
+        </div>
+    </div>
+    
+    <script src="/static/js/kline.js"></script>
+</body>
+</html>

@@ -9,7 +9,7 @@ import os
 import json
 import socket
 from datetime import datetime, timedelta
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template, send_from_directory, redirect, url_for
 from flask_cors import CORS
 from dotenv import load_dotenv
 import tushare_parquet as tsp
@@ -19,7 +19,9 @@ import pandas as pd
 load_dotenv()
 
 # 初始化 Flask 应用
-app = Flask(__name__)
+app = Flask(__name__, 
+            template_folder='../views',
+            static_folder='../views')
 CORS(app)  # 允许跨域请求
 
 # 设置 tushare_parquet token
@@ -95,7 +97,13 @@ def format_response(data, message='success'):
 
 @app.route('/')
 def index():
-    """API 根路径"""
+    """首页 - 显示长江电力K线图"""
+    return render_template('index.html')
+
+
+@app.route('/api')
+def api_info():
+    """API 信息页面"""
     return jsonify({
         'name': 'MoneyMore API',
         'version': API_VERSION,
@@ -110,6 +118,12 @@ def index():
             'disclosure_date': f'{API_PREFIX}/disclosure_date'
         }
     })
+
+
+@app.route('/static/<path:filename>')
+def static_files(filename):
+    """静态文件服务"""
+    return send_from_directory(app.static_folder, filename)
 
 
 @app.route(f'{API_PREFIX}/stock_data')
