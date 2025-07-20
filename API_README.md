@@ -31,10 +31,15 @@ API_PORT=5000
 ### 3. 启动 API 服务
 
 ```bash
-python api_server.py
+python app.py
 ```
 
 服务将在配置的端口启动（默认 `http://localhost:5000`，如端口被占用会自动使用下一个可用端口）。
+
+**项目结构**：
+- `app.py`：程序启动入口
+- `api/server.py`：API 服务核心模块
+- `api/__init__.py`：API 包初始化文件
 
 ## API 接口文档
 
