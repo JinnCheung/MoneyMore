@@ -3,29 +3,83 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>长江电力 K线图 - MoneyMore</title>
+    <title>股票K线图 - MoneyMore</title>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
+    <button class="theme-toggle" id="themeToggle" title="切换夜间模式">
+        ◑
+    </button>
     <div class="container">
         <div class="header">
-            <h1>长江电力(600900.SH) K线图</h1>
-            <p>数据来源：MoneyMore API | 基于 tushare_parquet</p>
+            <div class="title">股票K线图分析</div>
+            <div class="subtitle">数据来源：MoneyMore API | 更新时间：<span id="updateTime"></span></div>
         </div>
         
-        <div class="chart-container">
-            <div id="klineChart"></div>
+        <div class="controls">
+            <div class="control-group">
+                <label for="stockSearch">选择股票：</label>
+                <div class="stock-search-container">
+                    <input type="text" id="stockSearch" class="stock-search-input" placeholder="输入股票代码或名称搜索..." autocomplete="off">
+                    <div id="stockDropdown" class="stock-dropdown"></div>
+                </div>
+            </div>
+            <div class="control-group">
+                <label for="periodSelect">时间跨度：</label>
+                <select id="periodSelect">
+                    <option value="1M">1个月</option>
+                    <option value="3M">3个月</option>
+                    <option value="6M">6个月</option>
+                    <option value="1Y" selected>1年</option>
+                    <option value="2Y">2年</option>
+                    <option value="5Y">5年</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="adjSelect">复权方式：</label>
+                <select id="adjSelect">
+                    <option value="qfq">前复权</option>
+                    <option value="hfq">后复权</option>
+                    <option value="" selected>不复权</option>
+                </select>
+            </div>
+            <button id="updateBtn">更新数据</button>
         </div>
         
-        <div class="info">
-            <p><strong>说明：</strong></p>
-            <ul>
-                <li>红色/绿色蜡烛图表示股价涨跌</li>
-                <li>鼠标悬停可查看详细数据</li>
-                <li>可使用鼠标滚轮缩放，拖拽平移</li>
-                <li>数据更新时间：<span id="updateTime"></span></li>
-            </ul>
+        <div id="chart">
+            <div class="loading">正在加载K线图数据...</div>
+        </div>
+        
+        <div class="stats" id="stats" style="display: none;">
+            <div class="stat-item">
+                <div class="stat-value" id="stockName">-</div>
+                <div class="stat-label">股票名称</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="totalDays">-</div>
+                <div class="stat-label">交易日数</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="startPrice">-</div>
+                <div class="stat-label">起始价格</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="endPrice">-</div>
+                <div class="stat-label">结束价格</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="totalReturn">-</div>
+                <div class="stat-label">股价收益率</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="maxPrice">-</div>
+                <div class="stat-label">最高价</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="minPrice">-</div>
+                <div class="stat-label">最低价</div>
+            </div>
         </div>
     </div>
     

@@ -2,25 +2,109 @@
 
 // 配置
 const CONFIG = {
-    STOCK_CODE: '600900.SH',  // 长江电力
-    STOCK_NAME: '长江电力',
-    API_BASE_URL: '/api/v1',
-    CHART_HEIGHT: 600
+    API_BASE_URL: getApiBaseUrl(),
+    DEFAULT_STOCK: '600900.SH',  // 默认股票：长江电力
+    CHART_HEIGHT: 500
 };
+
+// 动态获取API基础URL，自动适应当前端口
+function getApiBaseUrl() {
+    // 使用当前页面的协议、主机和端口
+    const { protocol, hostname, port } = window.location;
+    const baseUrl = `${protocol}//${hostname}${port ? ':' + port : ''}`;
+    return `${baseUrl}/api/v1`;
+}
 
 // 全局变量
 let chart = null;
+let currentStock = CONFIG.DEFAULT_STOCK;
+let stockList = [];
+let selectedStockIndex = -1;
 
 // 初始化页面
 function initPage() {
-    // 更新时间显示
-    updateTimeDisplay();
-    
     // 初始化图表
     initChart();
     
-    // 加载数据
+    // 初始化控件
+    initControls();
+    
+    // 初始化主题切换
+    initThemeToggle();
+    
+    // 加载股票列表
+    loadStockList();
+    
+    // 加载默认数据
     loadKlineData();
+}
+
+// 初始化控件
+function initControls() {
+    // 股票搜索
+    const stockSearch = document.getElementById('stockSearch');
+    const stockDropdown = document.getElementById('stockDropdown');
+    
+    // 设置默认值
+    stockSearch.value = `长江电力 (${CONFIG.DEFAULT_STOCK})`;
+    
+    stockSearch.addEventListener('input', handleStockSearch);
+    
+    // 获得焦点时清空内容并显示默认列表
+    stockSearch.addEventListener('focus', async () => {
+        stockSearch.value = ''; // 自动清空输入框内容
+        const stocks = await searchStocks('');
+        showStockOptions(stocks.slice(0, 10));
+    });
+    
+    // 点击外部关闭下拉框
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.stock-search-container')) {
+            hideStockDropdown();
+        }
+    });
+    
+    // 键盘导航
+    stockSearch.addEventListener('keydown', handleKeyNavigation);
+    
+    // 更新按钮
+    document.getElementById('updateBtn').addEventListener('click', loadKlineData);
+}
+
+// 初始化主题切换
+function initThemeToggle() {
+    const themeToggle = document.getElementById('themeToggle');
+    
+    // 检查本地存储的主题设置
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark') {
+        document.body.classList.add('dark-mode');
+    }
+    
+    themeToggle.addEventListener('click', toggleTheme);
+}
+
+// 切换主题
+function toggleTheme() {
+    document.body.classList.toggle('dark-mode');
+    const isDark = document.body.classList.contains('dark-mode');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    
+    // 重新渲染图表以应用主题
+    if (chart) {
+        updateChartTheme();
+    }
+}
+
+// 更新图表主题
+function updateChartTheme() {
+    const isDark = document.body.classList.contains('dark-mode');
+    const option = chart.getOption();
+    
+    // 更新图表背景和文字颜色
+    option.backgroundColor = isDark ? '#2d2d2d' : '#fff';
+    
+    chart.setOption(option, true);
 }
 
 // 更新时间显示
@@ -37,9 +121,154 @@ function updateTimeDisplay() {
     document.getElementById('updateTime').textContent = timeStr;
 }
 
+// 搜索股票（支持股票代码、名称、拼音缩写）
+async function searchStocks(query) {
+    try {
+        const { protocol, hostname, port } = window.location;
+        const baseUrl = `${protocol}//${hostname}${port ? ':' + port : ''}`;
+        const response = await fetch(`${baseUrl}/api/search_stocks?q=${encodeURIComponent(query)}&limit=20`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        const stocks = await response.json();
+        return stocks;
+    } catch (error) {
+        console.error('搜索股票失败:', error);
+        return [];
+    }
+}
+
+// 加载股票列表（备用数据）
+async function loadStockList() {
+    try {
+        const response = await fetch(`${CONFIG.API_BASE_URL}/stock_basic`);
+        const data = await response.json();
+        
+        if (data.success && data.data) {
+            stockList = data.data;
+            console.log(`✅ 加载了 ${stockList.length} 只股票`);
+        }
+    } catch (error) {
+        console.error('加载股票列表失败:', error);
+        stockList = [
+            { ts_code: '600900.SH', name: '长江电力', industry: '电力' },
+            { ts_code: '000001.SZ', name: '平安银行', industry: '银行' },
+            { ts_code: '000002.SZ', name: '万科A', industry: '房地产' }
+        ];
+    }
+}
+
+// 处理股票搜索
+function handleStockSearch(e) {
+    const query = e.target.value.trim();
+    
+    // 清除之前的搜索定时器
+    if (window.searchTimeout) {
+        clearTimeout(window.searchTimeout);
+    }
+    
+    // 延迟搜索，避免频繁请求
+    window.searchTimeout = setTimeout(async () => {
+        if (query.length > 0) {
+            const stocks = await searchStocks(query);
+            showStockOptions(stocks);
+        } else {
+            hideStockDropdown();
+        }
+    }, 300);
+}
+
+// 显示股票选项
+function showStockOptions(stocks) {
+    const dropdown = document.getElementById('stockDropdown');
+    
+    if (stocks.length === 0) {
+        dropdown.innerHTML = '<div class="stock-option">未找到匹配的股票</div>';
+    } else {
+        dropdown.innerHTML = stocks.map((stock, index) => `
+            <div class="stock-option" data-index="${index}" data-code="${stock.code}" data-name="${stock.name}">
+                <span class="stock-option-code">${stock.code}</span>
+                <span class="stock-option-name">${stock.name}</span>
+                <span class="stock-option-info">${stock.industry || ''} ${stock.area || ''}</span>
+            </div>
+        `).join('');
+        
+        // 添加点击事件
+        dropdown.querySelectorAll('.stock-option').forEach(option => {
+            option.addEventListener('click', () => selectStock(option));
+        });
+    }
+    
+    showStockDropdown();
+    selectedStockIndex = -1;
+}
+
+// 显示股票下拉框
+function showStockDropdown() {
+    document.getElementById('stockDropdown').style.display = 'block';
+}
+
+// 隐藏股票下拉框
+function hideStockDropdown() {
+    document.getElementById('stockDropdown').style.display = 'none';
+    selectedStockIndex = -1;
+}
+
+// 选择股票
+async function selectStock(option) {
+    const code = option.dataset.code;
+    const name = option.dataset.name;
+    
+    currentStock = code;
+    document.getElementById('stockSearch').value = `${name} (${code})`;
+    hideStockDropdown();
+    
+    console.log(`选择股票: ${code} ${name}`);
+    
+    // 选择股票后直接加载K线数据
+    await loadKlineData();
+}
+
+// 键盘导航
+function handleKeyNavigation(e) {
+    const dropdown = document.getElementById('stockDropdown');
+    const options = dropdown.querySelectorAll('.stock-option');
+    
+    if (options.length === 0) return;
+    
+    switch (e.key) {
+        case 'ArrowDown':
+            e.preventDefault();
+            selectedStockIndex = Math.min(selectedStockIndex + 1, options.length - 1);
+            updateSelection(options);
+            break;
+        case 'ArrowUp':
+            e.preventDefault();
+            selectedStockIndex = Math.max(selectedStockIndex - 1, 0);
+            updateSelection(options);
+            break;
+        case 'Enter':
+            e.preventDefault();
+            if (selectedStockIndex >= 0) {
+                selectStock(options[selectedStockIndex]);
+            }
+            break;
+        case 'Escape':
+            hideStockDropdown();
+            break;
+    }
+}
+
+// 更新选择状态
+function updateSelection(options) {
+    options.forEach((option, index) => {
+        option.classList.toggle('selected', index === selectedStockIndex);
+    });
+}
+
 // 初始化ECharts图表
 function initChart() {
-    const chartContainer = document.getElementById('klineChart');
+    const chartContainer = document.getElementById('chart');
     chart = echarts.init(chartContainer);
     
     // 显示加载状态
@@ -91,18 +320,24 @@ function showError(message) {
 // 加载K线数据
 async function loadKlineData() {
     try {
-        // 计算日期范围（最近3个月）
-        const endDate = new Date();
-        const startDate = new Date();
-        startDate.setMonth(endDate.getMonth() - 3);
+        showLoading();
         
+        // 获取时间跨度
+        const period = document.getElementById('periodSelect').value || '1Y';
+        const adj = document.getElementById('adjSelect').value || '';
+        
+        // 计算日期范围
+        const { startDate, endDate } = calculateDateRange(period);
         const startDateStr = formatDate(startDate);
         const endDateStr = formatDate(endDate);
         
-        console.log(`获取股票数据: ${startDateStr} 至 ${endDateStr}`);
+        console.log(`获取股票数据: ${currentStock}, ${startDateStr} 至 ${endDateStr}, 复权: ${adj || '不复权'}`);
         
         // 构建API请求URL
-        const url = `${CONFIG.API_BASE_URL}/stock_data?ts_code=${CONFIG.STOCK_CODE}&start_date=${startDateStr}&end_date=${endDateStr}`;
+        let url = `${CONFIG.API_BASE_URL}/stock_data?ts_code=${currentStock}&start_date=${startDateStr}&end_date=${endDateStr}`;
+        if (adj) {
+            url += `&adj=${adj}`;
+        }
         
         // 发起API请求
         const response = await fetch(url);
@@ -122,8 +357,11 @@ async function loadKlineData() {
         }
         
         // 格式化数据并渲染图表
-        const { dates, klineData } = formatStockData(data.data);
-        renderChart(dates, klineData);
+        const { dates, klineData, stockInfo } = formatStockData(data.data);
+        renderChart(dates, klineData, stockInfo);
+        
+        // 显示统计信息
+        showStats(stockInfo);
         
         // 更新时间显示
         updateTimeDisplay();
@@ -134,6 +372,37 @@ async function loadKlineData() {
         console.error('加载K线数据失败:', error);
         showError('加载数据失败: ' + error.message);
     }
+}
+
+// 计算日期范围
+function calculateDateRange(period) {
+    const endDate = new Date();
+    const startDate = new Date();
+    
+    switch (period) {
+        case '1M':
+            startDate.setMonth(endDate.getMonth() - 1);
+            break;
+        case '3M':
+            startDate.setMonth(endDate.getMonth() - 3);
+            break;
+        case '6M':
+            startDate.setMonth(endDate.getMonth() - 6);
+            break;
+        case '1Y':
+            startDate.setFullYear(endDate.getFullYear() - 1);
+            break;
+        case '2Y':
+            startDate.setFullYear(endDate.getFullYear() - 2);
+            break;
+        case '5Y':
+            startDate.setFullYear(endDate.getFullYear() - 5);
+            break;
+        default:
+            startDate.setFullYear(endDate.getFullYear() - 1);
+    }
+    
+    return { startDate, endDate };
 }
 
 // 格式化日期
@@ -152,6 +421,9 @@ function formatStockData(stockData) {
     // 按日期排序（从旧到新）
     stockData.sort((a, b) => a.trade_date - b.trade_date);
     
+    let minPrice = Infinity;
+    let maxPrice = -Infinity;
+    
     stockData.forEach(item => {
         // 格式化日期显示
         const dateStr = item.trade_date.toString();
@@ -159,29 +431,84 @@ function formatStockData(stockData) {
         dates.push(formattedDate);
         
         // K线数据格式: [开盘, 收盘, 最低, 最高]
-        klineData.push([
-            parseFloat(item.open),
-            parseFloat(item.close),
-            parseFloat(item.low),
-            parseFloat(item.high)
-        ]);
+        const open = parseFloat(item.open);
+        const close = parseFloat(item.close);
+        const low = parseFloat(item.low);
+        const high = parseFloat(item.high);
+        
+        klineData.push([open, close, low, high]);
+        
+        // 计算最高最低价
+        minPrice = Math.min(minPrice, low);
+        maxPrice = Math.max(maxPrice, high);
     });
     
-    return { dates, klineData };
+    // 计算统计信息
+    const firstData = stockData[0];
+    const lastData = stockData[stockData.length - 1];
+    const startPrice = parseFloat(firstData.open);
+    const endPrice = parseFloat(lastData.close);
+    const totalReturn = ((endPrice - startPrice) / startPrice * 100).toFixed(2);
+    
+    const stockInfo = {
+        name: getStockName(currentStock),
+        totalDays: stockData.length,
+        startPrice: startPrice.toFixed(2),
+        endPrice: endPrice.toFixed(2),
+        totalReturn: totalReturn,
+        maxPrice: maxPrice.toFixed(2),
+        minPrice: minPrice.toFixed(2)
+    };
+    
+    return { dates, klineData, stockInfo };
+}
+
+// 获取股票名称
+function getStockName(tsCode) {
+    const stock = stockList.find(s => s.ts_code === tsCode);
+    return stock ? stock.name : tsCode;
+}
+
+// 显示统计信息
+function showStats(stockInfo) {
+    document.getElementById('stockName').textContent = stockInfo.name;
+    document.getElementById('totalDays').textContent = stockInfo.totalDays;
+    document.getElementById('startPrice').textContent = stockInfo.startPrice;
+    document.getElementById('endPrice').textContent = stockInfo.endPrice;
+    document.getElementById('totalReturn').textContent = stockInfo.totalReturn + '%';
+    document.getElementById('maxPrice').textContent = stockInfo.maxPrice;
+    document.getElementById('minPrice').textContent = stockInfo.minPrice;
+    
+    // 设置收益率颜色
+    const returnElement = document.getElementById('totalReturn');
+    const returnValue = parseFloat(stockInfo.totalReturn);
+    if (returnValue > 0) {
+        returnElement.style.color = '#ef4444';
+    } else if (returnValue < 0) {
+        returnElement.style.color = '#22c55e';
+    } else {
+        returnElement.style.color = '#666';
+    }
+    
+    // 显示统计面板
+    document.getElementById('stats').style.display = 'flex';
 }
 
 // 渲染图表
-function renderChart(dates, klineData) {
+function renderChart(dates, klineData, stockInfo) {
     hideLoading();
     
+    const isDark = document.body.classList.contains('dark-mode');
+    
     const option = {
+        backgroundColor: isDark ? '#2d2d2d' : '#fff',
         title: {
-            text: `${CONFIG.STOCK_NAME} K线图`,
+            text: `${stockInfo.name} K线图`,
             left: 'center',
             textStyle: {
-                fontSize: 20,
+                fontSize: 18,
                 fontWeight: 'bold',
-                color: '#2c3e50'
+                color: isDark ? '#e0e0e0' : '#2c3e50'
             }
         },
         tooltip: {
@@ -205,11 +532,11 @@ function renderChart(dates, klineData) {
                     `涨跌幅: ${changePercent}%`
                 ].join('<br/>');
             },
-            backgroundColor: 'rgba(255, 255, 255, 0.95)',
-            borderColor: '#667eea',
+            backgroundColor: isDark ? 'rgba(45, 45, 45, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+            borderColor: '#3498db',
             borderWidth: 1,
             textStyle: {
-                color: '#2c3e50'
+                color: isDark ? '#e0e0e0' : '#2c3e50'
             }
         },
         grid: {
@@ -227,14 +554,14 @@ function renderChart(dates, klineData) {
             axisLine: { 
                 onZero: false,
                 lineStyle: {
-                    color: '#bdc3c7'
+                    color: isDark ? '#555' : '#bdc3c7'
                 }
             },
             splitLine: { 
                 show: false 
             },
             axisLabel: {
-                color: '#7f8c8d'
+                color: isDark ? '#b0b0b0' : '#7f8c8d'
             }
         },
         yAxis: {
@@ -242,16 +569,18 @@ function renderChart(dates, klineData) {
             splitArea: {
                 show: true,
                 areaStyle: {
-                    color: ['rgba(250,250,250,0.1)', 'rgba(200,200,200,0.1)']
+                    color: isDark ? 
+                        ['rgba(68,68,68,0.1)', 'rgba(85,85,85,0.1)'] : 
+                        ['rgba(250,250,250,0.1)', 'rgba(200,200,200,0.1)']
                 }
             },
             axisLine: {
                 lineStyle: {
-                    color: '#bdc3c7'
+                    color: isDark ? '#555' : '#bdc3c7'
                 }
             },
             axisLabel: {
-                color: '#7f8c8d'
+                color: isDark ? '#b0b0b0' : '#7f8c8d'
             }
         },
         dataZoom: [
@@ -267,16 +596,16 @@ function renderChart(dates, klineData) {
                 start: 70,
                 end: 100,
                 handleStyle: {
-                    color: '#667eea'
+                    color: '#3498db'
                 },
                 textStyle: {
-                    color: '#7f8c8d'
+                    color: isDark ? '#b0b0b0' : '#7f8c8d'
                 }
             }
         ],
         series: [
             {
-                name: CONFIG.STOCK_NAME,
+                name: stockInfo.name,
                 type: 'candlestick',
                 data: klineData,
                 itemStyle: {
@@ -284,47 +613,13 @@ function renderChart(dates, klineData) {
                     color0: '#22c55e',     // 下跌颜色（绿色）
                     borderColor: '#ef4444',
                     borderColor0: '#22c55e'
-                },
-                markPoint: {
-                    label: {
-                        formatter: function (param) {
-                            return param != null ? Math.round(param.value) + '' : '';
-                        }
-                    },
-                    data: [
-                        {
-                            name: '最高值',
-                            type: 'max',
-                            valueDim: 'highest',
-                            symbol: 'pin',
-                            symbolSize: 50,
-                            itemStyle: {
-                                color: '#ef4444'
-                            }
-                        },
-                        {
-                            name: '最低值',
-                            type: 'min',
-                            valueDim: 'lowest',
-                            symbol: 'pin',
-                            symbolSize: 50,
-                            itemStyle: {
-                                color: '#22c55e'
-                            }
-                        }
-                    ],
-                    tooltip: {
-                        formatter: function (param) {
-                            return param.name + '<br>' + (param.data.coord || '');
-                        }
-                    }
                 }
             }
         ]
     };
     
     // 设置图表配置
-    chart.setOption(option);
+    chart.setOption(option, true);
 }
 
 // 页面加载完成后初始化

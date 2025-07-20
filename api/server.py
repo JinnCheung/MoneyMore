@@ -434,6 +434,87 @@ def get_disclosure_date():
     return format_response(df, '财报披露计划数据获取成功')
 
 
+@app.route('/api/search_stocks')
+@handle_api_error
+def search_stocks():
+    """
+    搜索股票（支持股票代码、名称、拼音缩写等）
+    
+    参数:
+        q (str): 搜索关键词
+        limit (int, 可选): 返回结果数量限制，默认20
+    """
+    query = request.args.get('q', '').strip()
+    limit = int(request.args.get('limit', 20))
+    
+    # 获取股票基础信息
+    try:
+        df = tsp.stock_basic(ttl_minutes=1440)  # 缓存1天
+        
+        if df is None or df.empty:
+            return jsonify({
+                'success': False,
+                'message': '无法获取股票基础信息',
+                'data': []
+            })
+        
+        # 如果没有查询条件，返回前N个活跃股票
+        if not query:
+            # 过滤掉退市股票，按市值排序
+            active_stocks = df[df['list_status'] == 'L'].head(limit)
+            result = []
+            for _, row in active_stocks.iterrows():
+                result.append({
+                    'code': row['ts_code'],
+                    'name': row['name'],
+                    'industry': row.get('industry', ''),
+                    'area': row.get('area', ''),
+                    'market': row.get('market', ''),
+                    'list_date': row.get('list_date', '')
+                })
+            return jsonify(result)
+        
+        # 进行搜索匹配
+        query_lower = query.lower()
+        matched_stocks = []
+        
+        for _, row in df.iterrows():
+            # 跳过退市股票
+            if row.get('list_status') != 'L':
+                continue
+                
+            ts_code = str(row['ts_code']).lower()
+            name = str(row['name']).lower()
+            
+            # 匹配股票代码或名称
+            if (query_lower in ts_code or 
+                query_lower in name or
+                query in str(row['ts_code']) or
+                query in str(row['name'])):
+                
+                matched_stocks.append({
+                    'code': row['ts_code'],
+                    'name': row['name'],
+                    'industry': row.get('industry', ''),
+                    'area': row.get('area', ''),
+                    'market': row.get('market', ''),
+                    'list_date': row.get('list_date', '')
+                })
+                
+                # 限制返回数量
+                if len(matched_stocks) >= limit:
+                    break
+        
+        return jsonify(matched_stocks)
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'搜索失败: {str(e)}',
+            'data': []
+        })
+
+
 @app.errorhandler(404)
 def not_found(error):
     """404 错误处理"""
