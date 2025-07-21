@@ -46,8 +46,10 @@ function getApiBaseUrl() {
 async function detectApiPort() {
     const { protocol, hostname } = window.location;
     
-    // 检测5000-5010端口范围
-    for (let port = 5000; port <= 5010; port++) {
+    // 检测常用端口：8000, 5000-5010
+    const portsToCheck = [8000, ...Array.from({length: 11}, (_, i) => 5000 + i)];
+    
+    for (let port of portsToCheck) {
         try {
             const testUrl = `${protocol}//${hostname}:${port}/api/v1/stock_basic`;
             const response = await fetch(testUrl, {
@@ -65,7 +67,7 @@ async function detectApiPort() {
         }
     }
     
-    throw new Error('无法在5000-5010端口范围内找到可用的API服务');
+    throw new Error('无法在常用端口范围内找到可用的API服务');
 }
 
 // 全局变量
@@ -704,12 +706,18 @@ function formatDate(date) {
 }
 
 // 格式化股票数据
+// 全局变量存储原始股票数据
+let rawStockData = [];
+
 function formatStockData(stockData) {
     const dates = [];
     const klineData = [];
     
     // 按日期排序（从旧到新）
     stockData.sort((a, b) => a.trade_date - b.trade_date);
+    
+    // 保存原始数据供tooltip使用
+    rawStockData = stockData;
     
     let minPrice = Infinity;
     let maxPrice = -Infinity;
@@ -868,17 +876,40 @@ function renderChart(dates, klineData, stockInfo) {
             formatter: function(params) {
                 const data = params[0];
                 const values = data.data;
-                const change = values[1] - values[0];
-                const changePercent = ((change / values[0]) * 100).toFixed(2);
+                const currentIndex = dates.indexOf(data.name);
+                
+                // 从原始数据中获取所有信息
+                let open = values[0];
+                let close = values[1];
+                let low = values[2];
+                let high = values[3];
+                let change = 0;
+                let changePercent = 0;
+                let volume = 0;
+                let amount = 0;
+                
+                if (currentIndex >= 0 && currentIndex < rawStockData.length) {
+                    const rawData = rawStockData[currentIndex];
+                    open = parseFloat(rawData.open) || values[0];
+                    close = parseFloat(rawData.close) || values[1];
+                    low = parseFloat(rawData.low) || values[2];
+                    high = parseFloat(rawData.high) || values[3];
+                    change = rawData.change || 0;
+                    changePercent = rawData.pct_chg || 0;
+                    volume = rawData.vol || 0;
+                    amount = rawData.amount || 0;
+                }
                 
                 let tooltip = [
                     `<strong>${data.name}</strong>`,
-                    `开盘: ${values[0].toFixed(2)}`,
-                    `收盘: ${values[1].toFixed(2)}`,
-                    `最低: ${values[2].toFixed(2)}`,
-                    `最高: ${values[3].toFixed(2)}`,
+                    `开盘: ${open.toFixed(2)}`,
+                    `收盘: ${close.toFixed(2)}`,
+                    `最低: ${low.toFixed(2)}`,
+                    `最高: ${high.toFixed(2)}`,
                     `涨跌: ${change.toFixed(2)}`,
-                    `涨跌幅: ${changePercent}%`
+                    `涨跌幅: ${changePercent.toFixed(2)}%`,
+                    `成交量: ${volume.toFixed(0)}手`,
+                    `成交额: ${(amount / 10).toFixed(0)}万元`
                 ];
                 
                 // 检查是否有财报数据
