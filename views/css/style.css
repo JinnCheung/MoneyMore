@@ -12,7 +12,7 @@ body {
     padding: 10px;
     background-color: #f5f5f5;
     height: 100vh;
-    overflow: auto;
+    overflow: hidden;
     transition: background-color 0.3s, color 0.3s;
 }
 
@@ -124,7 +124,7 @@ body.dark-mode #updateBtn:hover {
 }
 
 .header {
-    text-align: center;
+    text-align: left;
     margin-bottom: 10px;
     flex-shrink: 0;
 }
@@ -144,8 +144,7 @@ body.dark-mode #updateBtn:hover {
 #chart {
     width: 100%;
     flex: 1;
-    min-height: 500px;
-    height: 500px;
+    min-height: 0; /* 允许图表在 flex 布局中缩小 */
     border: 1px solid #ddd;
     background-color: #fff;
 }
@@ -379,4 +378,70 @@ body.dark-mode .theme-toggle:hover {
     #klineChart {
         height: 300px;
     }
+}
+
+/* 开关按钮样式 */
+.toggle-switch {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.toggle-input {
+    display: none;
+}
+
+.toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.toggle-slider {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    background: #ccc;
+    border-radius: 12px;
+    transition: background 0.3s;
+}
+
+.toggle-slider::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 20px;
+    height: 20px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.3s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.toggle-input:checked + .toggle-label .toggle-slider {
+    background: #3498db;
+}
+
+.toggle-input:checked + .toggle-label .toggle-slider::before {
+    transform: translateX(20px);
+}
+
+.toggle-text {
+    font-size: 14px;
+    color: #666;
+}
+
+body.dark-mode .toggle-slider {
+    background: #555;
+}
+
+body.dark-mode .toggle-input:checked + .toggle-label .toggle-slider {
+    background: #3498db;
+}
+
+body.dark-mode .toggle-text {
+    color: #b0b0b0;
 }

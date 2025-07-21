@@ -73,6 +73,9 @@ let chart = null;
 let currentStock = CONFIG.DEFAULT_STOCK;
 let stockList = [];
 let selectedStockIndex = -1;
+let earningsData = null;
+let tradingCalendar = null;
+let showEarnings = false;
 
 // 初始化页面
 async function initPage() {
@@ -130,6 +133,37 @@ function initControls() {
     // 时间跨度和复权方式改变时自动更新
     document.getElementById('periodSelect').addEventListener('change', loadKlineData);
     document.getElementById('adjSelect').addEventListener('change', loadKlineData);
+    
+    // 财报标记开关
+    const earningsToggle = document.getElementById('earningsToggle');
+    earningsToggle.addEventListener('change', (e) => {
+    showEarnings = e.target.checked;
+    if (chart) {
+        if (showEarnings) {
+            // 显示财报标记
+            updateEarningsMarks(true);
+        } else {
+            // 隐藏财报标记
+            updateEarningsMarks(false);
+        }
+    }
+});
+
+// 新增函数：更新财报标记的显示状态
+function updateEarningsMarks(show) {
+    if (!chart) return;
+    const option = chart.getOption();
+    if (!option) return;
+
+    // 假设财报标记在series中，名称为'earningsMarks'和'earningsLines'
+    option.series.forEach(series => {
+        if (series.name === 'earningsMarks' || series.name === 'earningsLines') {
+            series.show = show;
+        }
+    });
+
+    chart.setOption(option, true);
+}
 }
 
 // 初始化主题切换
@@ -427,13 +461,58 @@ async function loadKlineData() {
         
         // 格式化数据并渲染图表
         const { dates, klineData, stockInfo } = formatStockData(data.data);
-        renderChart(dates, klineData, stockInfo);
+        
+        // 保存数据到全局变量，供财报标记使用
+        window.currentChartData = { dates, klineData, stockInfo };
+        
+
         
         // 显示统计信息
         showStats(stockInfo);
         
         // 更新时间显示
         updateTimeDisplay();
+        
+        // 根据 showEarnings 状态决定是否加载财报数据
+        if (showEarnings) {
+            try {
+                const earningsResponse = await fetch(`${CONFIG.API_BASE_URL}/earnings?ts_code=${currentStock}`);
+                if (earningsResponse.ok) {
+                    const earningsResult = await earningsResponse.json();
+                    if (earningsResult.success && earningsResult.data) {
+                        earningsData = earningsResult.data;
+                        console.log(`✅ 加载了 ${earningsData.length} 条财报数据`);
+                    } else {
+                        earningsData = [];
+                    }
+                } else {
+                    earningsData = [];
+                }
+            } catch (error) {
+                console.warn('加载财报数据失败:', error);
+                earningsData = [];
+            }
+        } else {
+            earningsData = [];
+        }
+
+        renderChart(dates, klineData, stockInfo);
+
+        // 根据时间跨度动态设置dataZoom
+         const years = parseInt(period.replace('Y', ''));
+         const dataLength = dates.length;
+         if (dataLength > 0) {
+             const daysPerYear = 252; // 估算每年交易日
+             const daysToShow = years * daysPerYear;
+             const startIndex = Math.max(0, dataLength - daysToShow);
+             const startPercent = (startIndex / dataLength) * 100;
+ 
+             chart.dispatchAction({
+                 type: 'dataZoom',
+                 start: startPercent,
+                 end: 100
+             });
+         }
         
         console.log(`✅ 成功加载 ${data.data.length} 条数据`);
         
@@ -575,7 +654,34 @@ function showStats(stockInfo) {
     document.getElementById('stats').style.display = 'flex';
 }
 
-// 渲染图表
+
+
+
+
+// 加载交易日历
+ async function loadTradingCalendar() {
+     try {
+         const response = await fetch(`${CONFIG.API_BASE_URL}/api/v1/trading_calendar`);
+         
+         if (!response.ok) {
+             console.warn('获取交易日历失败:', response.statusText);
+             return;
+         }
+         
+         const result = await response.json();
+         
+         if (result.success && result.data) {
+             tradingCalendar = result.data;
+             console.log(`✅ 加载了交易日历数据`);
+         }
+     } catch (error) {
+         console.warn('加载交易日历失败:', error);
+     }
+ }
+
+
+
+// 渲染带财报标记的图表
 function renderChart(dates, klineData, stockInfo) {
     hideLoading();
     
@@ -587,9 +693,44 @@ function renderChart(dates, klineData, stockInfo) {
     
     const isDark = document.body.classList.contains('dark-mode');
     
+    // 处理财报标记数据
+    const earningsMarks = [];
+    const earningsLines = [];
+    
+    if (showEarnings && earningsData && earningsData.length > 0) {
+        earningsLines.length = 0;
+        earningsData.forEach(earning => {
+            const dateStr = earning.ann_date.toString();
+            const formattedDate = `${dateStr.slice(0,4)}-${dateStr.slice(4,6)}-${dateStr.slice(6,8)}`;
+            const dateIndex = dates.indexOf(formattedDate);
+            
+            if (dateIndex >= 0) {
+                // 仅添加垂直虚线
+                earningsLines.push({
+                    name: formattedDate,
+                    xAxis: formattedDate,
+                    lineStyle: {
+                        color: '#ff6b35',
+                        type: 'dashed',
+                        width: 1,
+                        opacity: 0.6
+                    },
+                    label: {
+                        show: true,
+                        formatter: '{b}',
+                        position: 'end',
+                        color: isDark ? '#e0e0e0' : '#2c3e50',
+                        fontSize: 12
+                    },
+                    symbol: 'none',
+                    symbolSize: 0
+                });
+            }
+        });
+    }
+    
     const option = {
         backgroundColor: isDark ? '#2d2d2d' : '#fff',
-        // 移除图表标题，不在图表上方显示股票名称
         tooltip: {
             trigger: 'axis',
             axisPointer: {
@@ -601,7 +742,7 @@ function renderChart(dates, klineData, stockInfo) {
                 const change = values[1] - values[0];
                 const changePercent = ((change / values[0]) * 100).toFixed(2);
                 
-                return [
+                let tooltip = [
                     `<strong>${data.name}</strong>`,
                     `开盘: ${values[0].toFixed(2)}`,
                     `收盘: ${values[1].toFixed(2)}`,
@@ -609,7 +750,28 @@ function renderChart(dates, klineData, stockInfo) {
                     `最高: ${values[3].toFixed(2)}`,
                     `涨跌: ${change.toFixed(2)}`,
                     `涨跌幅: ${changePercent}%`
-                ].join('<br/>');
+                ];
+                
+                // 检查是否有财报数据
+                 if (showEarnings && earningsData) {
+                     const earning = earningsData.find(e => {
+                         const dateStr = e.ann_date.toString();
+                         const formattedDate = `${dateStr.slice(0,4)}-${dateStr.slice(4,6)}-${dateStr.slice(6,8)}`;
+                         return formattedDate === data.name;
+                     });
+                     
+                     if (earning) {
+                     tooltip.push('', '<strong style="color: #ff6b35;">📊 财报发布日</strong>');
+                     if (earning.basic_eps) {
+                         tooltip.push(`每股收益: ${earning.basic_eps}`);
+                     }
+                     if (earning.total_revenue) {
+                         tooltip.push(`营业收入: ${(earning.total_revenue / 100000000).toFixed(2)}亿`);
+                     }
+                 }
+                 }
+                
+                return tooltip.join('<br/>');
             },
             backgroundColor: isDark ? 'rgba(45, 45, 45, 0.95)' : 'rgba(255, 255, 255, 0.95)',
             borderColor: '#3498db',
@@ -664,16 +826,14 @@ function renderChart(dates, klineData, stockInfo) {
         },
         dataZoom: [
             {
-                type: 'inside',
-                start: 70,
-                end: 100
+                type: 'inside'
+                // start and end are set dynamically in loadKlineData
             },
             {
                 show: true,
                 type: 'slider',
                 top: '90%',
-                start: 70,
-                end: 100,
+                // start and end are set dynamically in loadKlineData
                 handleStyle: {
                     color: '#3498db'
                 },
@@ -692,6 +852,12 @@ function renderChart(dates, klineData, stockInfo) {
                     color0: '#22c55e',     // 下跌颜色（绿色）
                     borderColor: '#ef4444',
                     borderColor0: '#22c55e'
+                },
+
+
+                markLine: {
+                    data: earningsLines,
+                    silent: true
                 }
             }
         ]
@@ -699,6 +865,13 @@ function renderChart(dates, klineData, stockInfo) {
     
     // 设置图表配置
     chart.setOption(option, true);
+
+    // 强制图表在下一个事件循环中重新计算尺寸，确保布局稳定
+    setTimeout(() => {
+        if (chart) {
+            chart.resize();
+        }
+    }, 0);
 }
 
 // 页面加载完成后初始化

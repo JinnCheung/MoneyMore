@@ -433,6 +433,166 @@ def get_disclosure_date():
     return format_response(df, '财报披露计划数据获取成功')
 
 
+@app.route(f'{API_PREFIX}/earnings')
+@handle_api_error
+def get_earnings():
+    """
+    获取财报数据用于K线图标记
+    
+    参数:
+        ts_code (str): 股票代码（必需）
+        ttl_minutes (int, 可选): 缓存时间（分钟），默认43200（30天）
+    """
+    ts_code = request.args.get('ts_code')
+    
+    if not ts_code:
+        return jsonify({
+            'success': False,
+            'error': 'MissingParameter',
+            'message': '缺少必需参数: ts_code'
+        }), 400
+    
+    ttl_minutes = int(request.args.get('ttl_minutes', 43200))
+    
+    try:
+        # 获取财报披露计划数据
+        disclosure_data = tsp.disclosure_date(ts_code=ts_code, ttl_minutes=ttl_minutes)
+        
+        if disclosure_data is None or disclosure_data.empty:
+            return jsonify({
+                'success': True,
+                'message': '未找到财报披露数据',
+                'data': [],
+                'count': 0
+            })
+        
+        # 过滤有实际披露日期的数据
+        actual_disclosures = disclosure_data[disclosure_data['actual_date'].notna()]
+        
+        if actual_disclosures.empty:
+            return jsonify({
+                'success': True,
+                'message': '未找到实际披露日期数据',
+                'data': [],
+                'count': 0
+            })
+        
+        # 获取交易日历数据
+        trade_cal = tsp.trade_cal(ttl_minutes=ttl_minutes)
+        trading_days = set(trade_cal[trade_cal['is_open'] == 1]['cal_date'].astype(str))
+        
+        # 处理财报数据，调整到最近的交易日
+        earnings_data = []
+        for _, row in actual_disclosures.iterrows():
+            actual_date = str(row['actual_date'])
+            
+            # 如果实际披露日期是交易日，直接使用
+            if actual_date in trading_days:
+                ann_date = actual_date
+            else:
+                # 找到最近的下一个交易日
+                ann_date = find_next_trading_day(actual_date, trading_days)
+            
+            if ann_date:
+                earnings_data.append({
+                    'ts_code': row['ts_code'],
+                    'end_date': row['end_date'],
+                    'ann_date': ann_date,
+                    'actual_date': actual_date,
+                    'pre_date': row['pre_date']
+                })
+        
+        return jsonify({
+            'success': True,
+            'message': '财报数据获取成功',
+            'data': earnings_data,
+            'count': len(earnings_data),
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': 'InternalError',
+            'message': f'获取财报数据失败: {str(e)}'
+        }), 500
+
+
+@app.route(f'{API_PREFIX}/trading_calendar')
+@handle_api_error
+def get_trading_calendar():
+    """
+    获取交易日历
+    
+    参数:
+        exchange (str, 可选): 交易所 SSE上交所 SZSE深交所
+        start_date (str, 可选): 开始日期
+        end_date (str, 可选): 结束日期
+        is_open (str, 可选): 是否交易 0休市 1交易
+        ttl_minutes (int, 可选): 缓存时间（分钟），默认43200（30天）
+    """
+    # 获取参数
+    params = {
+        'exchange': request.args.get('exchange'),
+        'start_date': request.args.get('start_date'),
+        'end_date': request.args.get('end_date'),
+        'is_open': request.args.get('is_open')
+    }
+    
+    # 移除空值参数
+    params = {k: v for k, v in params.items() if v is not None}
+    
+    ttl_minutes = int(request.args.get('ttl_minutes', 43200))
+    
+    try:
+        data = tsp.trade_cal(ttl_minutes=ttl_minutes, **params)
+        
+        if data is None or data.empty:
+            return jsonify({
+                'success': True,
+                'message': '未找到交易日历数据',
+                'data': [],
+                'count': 0
+            })
+        
+        return format_response(data, '交易日历数据获取成功')
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': 'InternalError',
+            'message': f'获取交易日历失败: {str(e)}'
+        }), 500
+
+
+def find_next_trading_day(date_str, trading_days):
+    """
+    找到指定日期之后的最近交易日
+    
+    参数:
+        date_str (str): 日期字符串，格式YYYYMMDD
+        trading_days (set): 交易日集合
+    
+    返回:
+        str: 最近的交易日，格式YYYYMMDD，如果找不到返回None
+    """
+    try:
+        # 解析日期
+        date_obj = datetime.strptime(date_str, '%Y%m%d')
+        
+        # 向后查找最多30天
+        for i in range(1, 31):
+            next_date = date_obj + timedelta(days=i)
+            next_date_str = next_date.strftime('%Y%m%d')
+            
+            if next_date_str in trading_days:
+                return next_date_str
+        
+        return None
+    except Exception:
+        return None
+
+
 @app.route('/api/search_stocks')
 @handle_api_error
 def search_stocks():

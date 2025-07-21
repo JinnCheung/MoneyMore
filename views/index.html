@@ -13,7 +13,7 @@
     </button>
     <div class="container">
         <div class="header">
-            <div class="title" id="pageTitle">股票数据分析</div>
+
             <div class="subtitle">数据来源：Tushare | 更新时间：<span id="updateTime"></span></div>
         </div>
         
@@ -47,6 +47,16 @@
                     <option value="hfq">后复权</option>
                     <option value="">不复权</option>
                 </select>
+            </div>
+            <div class="control-group">
+                <label for="earningsToggle">财报日标记：</label>
+                <div class="toggle-switch">
+                    <input type="checkbox" id="earningsToggle" class="toggle-input">
+                    <label for="earningsToggle" class="toggle-label">
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-text"></span>
+                    </label>
+                </div>
             </div>
 
         </div>
