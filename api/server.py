@@ -43,14 +43,13 @@ def is_port_available(port):
         return False
 
 
-def find_available_port(start_port):
-    """从指定端口开始查找可用端口"""
-    port = start_port
-    while port < start_port + 100:  # 最多尝试100个端口
+def find_available_port(start_port=5000):
+    """在5000-5010范围内查找可用端口"""
+    # 固定在5000-5010范围内查找
+    for port in range(5000, 5011):
         if is_port_available(port):
             return port
-        port += 1
-    raise RuntimeError(f"无法找到可用端口（从 {start_port} 开始）")
+    raise RuntimeError("无法在5000-5010端口范围内找到可用端口")
 
 
 def handle_api_error(func):

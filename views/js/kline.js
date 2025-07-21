@@ -2,17 +2,70 @@
 
 // 配置
 const CONFIG = {
-    API_BASE_URL: getApiBaseUrl(),
+    API_BASE_URL: null,  // 将在initPage中动态设置
     DEFAULT_STOCK: '600900.SH',  // 默认股票：长江电力
     CHART_HEIGHT: 500
 };
 
-// 动态获取API基础URL，自动适应当前端口
+// 初始化API URL
+async function initApiUrl() {
+    let apiUrl = getApiBaseUrl();
+    
+    if (!apiUrl) {
+        console.log('🔍 当前页面不在API端口范围内，开始检测可用端口...');
+        try {
+            apiUrl = await detectApiPort();
+        } catch (error) {
+            console.error('❌ API端口检测失败:', error.message);
+            showError('无法连接到API服务，请确保后端服务已启动');
+            return false;
+        }
+    }
+    
+    CONFIG.API_BASE_URL = apiUrl;
+    console.log('📡 API服务地址:', apiUrl);
+    return true;
+}
+
+// 动态获取API基础URL，自动检测5000-5010端口
 function getApiBaseUrl() {
-    // 使用当前页面的协议、主机和端口
+    // 如果当前页面已经在5000-5010端口范围内，直接使用
     const { protocol, hostname, port } = window.location;
-    const baseUrl = `${protocol}//${hostname}${port ? ':' + port : ''}`;
-    return `${baseUrl}/api/v1`;
+    const currentPort = parseInt(port) || 80;
+    
+    if (currentPort >= 5000 && currentPort <= 5010) {
+        const baseUrl = `${protocol}//${hostname}:${currentPort}`;
+        return `${baseUrl}/api/v1`;
+    }
+    
+    // 否则返回null，需要通过detectApiPort()检测
+    return null;
+}
+
+// 检测可用的API端口
+async function detectApiPort() {
+    const { protocol, hostname } = window.location;
+    
+    // 检测5000-5010端口范围
+    for (let port = 5000; port <= 5010; port++) {
+        try {
+            const testUrl = `${protocol}//${hostname}:${port}/api/v1/stock_basic`;
+            const response = await fetch(testUrl, {
+                method: 'GET',
+                timeout: 2000
+            });
+            
+            if (response.ok) {
+                console.log(`✅ 检测到API服务运行在端口 ${port}`);
+                return `${protocol}//${hostname}:${port}/api/v1`;
+            }
+        } catch (error) {
+            // 端口不可用，继续检测下一个
+            continue;
+        }
+    }
+    
+    throw new Error('无法在5000-5010端口范围内找到可用的API服务');
 }
 
 // 全局变量
@@ -23,6 +76,13 @@ let selectedStockIndex = -1;
 
 // 初始化页面
 async function initPage() {
+    // 首先初始化API URL
+    const apiReady = await initApiUrl();
+    if (!apiReady) {
+        console.error('❌ API初始化失败，无法继续');
+        return;
+    }
+    
     // 初始化图表
     initChart();
     

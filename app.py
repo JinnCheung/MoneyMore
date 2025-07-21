@@ -29,14 +29,10 @@ def main():
         # 导入并启动 API 服务
         from api.server import app, find_available_port, API_VERSION, API_PREFIX
         
-        # 获取默认端口
-        default_port = int(os.getenv('API_PORT', 5000))
-        
-        # 查找可用端口
+        # 在5000-5010范围内查找可用端口
         try:
-            available_port = find_available_port(default_port)
-            if available_port != default_port:
-                print(f"⚠️  警告: 默认端口 {default_port} 被占用，使用端口 {available_port}")
+            available_port = find_available_port()
+            print(f"✅ 找到可用端口: {available_port}")
         except RuntimeError as e:
             print(f"❌ 错误: {e}")
             sys.exit(1)
@@ -44,7 +40,7 @@ def main():
         print(f"📡 API 服务信息:")
         print(f"   版本: {API_VERSION}")
         print(f"   前缀: {API_PREFIX}")
-        print(f"   默认端口: {default_port}")
+        print(f"   端口范围: 5000-5010")
         print(f"   使用端口: {available_port}")
         print(f"   服务地址: http://localhost:{available_port}")
         
