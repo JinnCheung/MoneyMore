@@ -75,23 +75,51 @@ def handle_api_error(func):
 
 def format_response(data, message='success'):
     """格式化 API 响应"""
+    import math
+    
+    def clean_nan_values(obj):
+        """递归清理所有NaN值"""
+        if isinstance(obj, dict):
+            return {k: clean_nan_values(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [clean_nan_values(item) for item in obj]
+        elif isinstance(obj, float) and (math.isnan(obj) or obj != obj):  # 检查NaN
+            return None
+        else:
+            return obj
+    
     if isinstance(data, pd.DataFrame):
         # 将 DataFrame 转换为字典列表
         data_dict = data.to_dict('records')
-        return jsonify({
+        # 递归清理所有NaN值
+        data_dict = clean_nan_values(data_dict)
+        response_data = {
             'success': True,
             'message': message,
             'data': data_dict,
             'count': len(data_dict),
             'timestamp': datetime.now().isoformat()
-        })
+        }
+        # 使用json.dumps确保NaN值被正确处理为null
+        return app.response_class(
+            response=json.dumps(response_data, ensure_ascii=False),
+            status=200,
+            mimetype='application/json'
+        )
     else:
-        return jsonify({
+        # 清理非DataFrame数据中的NaN值
+        cleaned_data = clean_nan_values(data)
+        response_data = {
             'success': True,
             'message': message,
-            'data': data,
+            'data': cleaned_data,
             'timestamp': datetime.now().isoformat()
-        })
+        }
+        return app.response_class(
+            response=json.dumps(response_data, ensure_ascii=False),
+            status=200,
+            mimetype='application/json'
+        )
 
 
 @app.route('/')
@@ -489,16 +517,19 @@ def get_earnings():
             # 如果实际披露日期是交易日，直接使用
             if actual_date in trading_days:
                 ann_date = actual_date
+                display_date = actual_date
             else:
-                # 找到最近的下一个交易日
-                ann_date = find_next_trading_day(actual_date, trading_days)
+                # 找到最近的前一个交易日作为虚线标记位置
+                ann_date = find_previous_trading_day(actual_date, trading_days)
+                display_date = actual_date  # 保持显示真实披露日期
             
             if ann_date:
                 earnings_data.append({
                     'ts_code': row['ts_code'],
                     'end_date': row['end_date'],
-                    'ann_date': ann_date,
-                    'actual_date': actual_date,
+                    'ann_date': ann_date,  # 虚线标记的位置（交易日）
+                    'actual_date': actual_date,  # 真实披露日期
+                    'display_date': display_date,  # 显示的日期
                     'pre_date': row['pre_date']
                 })
         
@@ -587,6 +618,34 @@ def find_next_trading_day(date_str, trading_days):
             
             if next_date_str in trading_days:
                 return next_date_str
+        
+        return None
+    except Exception:
+        return None
+
+
+def find_previous_trading_day(date_str, trading_days):
+    """
+    找到指定日期之前的最近交易日
+    
+    参数:
+        date_str (str): 日期字符串，格式YYYYMMDD
+        trading_days (set): 交易日集合
+    
+    返回:
+        str: 最近的交易日，格式YYYYMMDD，如果找不到返回None
+    """
+    try:
+        # 解析日期
+        date_obj = datetime.strptime(date_str, '%Y%m%d')
+        
+        # 向前查找最多30天
+        for i in range(1, 31):
+            prev_date = date_obj - timedelta(days=i)
+            prev_date_str = prev_date.strftime('%Y%m%d')
+            
+            if prev_date_str in trading_days:
+                return prev_date_str
         
         return None
     except Exception:

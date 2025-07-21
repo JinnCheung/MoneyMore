@@ -76,6 +76,7 @@ let currentStock = CONFIG.DEFAULT_STOCK;
 let stockList = [];
 let selectedStockIndex = -1;
 let earningsData = null;
+let dividendData = null; // 存储分红数据
 let tradingCalendar = null;
 let showEarnings = false;
 let currentStockInfo = null; // 存储当前股票的基础信息
@@ -486,10 +487,11 @@ async function loadKlineData() {
             url += `&adj=${adj}`;
         }
         
-        // 并行获取K线和财报数据
-        const [stockResponse, earningsResponse] = await Promise.all([
+        // 并行获取K线、财报和分红数据
+        const [stockResponse, earningsResponse, dividendResponse] = await Promise.all([
             fetch(url),
-            fetch(`${CONFIG.API_BASE_URL}/earnings?ts_code=${currentStock}`)
+            fetch(`${CONFIG.API_BASE_URL}/earnings?ts_code=${currentStock}`),
+            fetch(`${CONFIG.API_BASE_URL}/dividend?ts_code=${currentStock}`)
         ]);
 
         // 处理K线数据
@@ -513,6 +515,20 @@ async function loadKlineData() {
         } else {
             console.warn('加载财报数据失败:', earningsResponse.statusText);
             earningsData = []; // API请求失败
+        }
+
+        // 处理分红数据
+        if (dividendResponse.ok) {
+            const dividendResult = await dividendResponse.json();
+            if (dividendResult.success && dividendResult.data) {
+                dividendData = dividendResult.data;
+                console.log(`✅ 加载了 ${dividendData.length} 条分红数据`);
+            } else {
+                dividendData = []; // API成功但无数据
+            }
+        } else {
+            console.warn('加载分红数据失败:', dividendResponse.statusText);
+            dividendData = []; // API请求失败
         }
 
         // 格式化数据并渲染图表
@@ -837,15 +853,20 @@ function renderChart(dates, klineData, stockInfo) {
     
     if (showEarnings && earningsData && earningsData.length > 0) {
         earningsData.forEach(earning => {
-            const dateStr = earning.ann_date.toString();
-            const formattedDate = `${dateStr.slice(0,4)}-${dateStr.slice(4,6)}-${dateStr.slice(6,8)}`;
-            const dateIndex = dates.indexOf(formattedDate);
+            // 使用ann_date作为虚线位置（交易日）
+            const annDateStr = earning.ann_date.toString();
+            const formattedAnnDate = `${annDateStr.slice(0,4)}-${annDateStr.slice(4,6)}-${annDateStr.slice(6,8)}`;
+            const dateIndex = dates.indexOf(formattedAnnDate);
+            
+            // 使用display_date作为显示的日期标签
+            const displayDateStr = earning.display_date ? earning.display_date.toString() : earning.ann_date.toString();
+            const formattedDisplayDate = `${displayDateStr.slice(0,4)}-${displayDateStr.slice(4,6)}-${displayDateStr.slice(6,8)}`;
             
             if (dateIndex >= 0) {
-                // 仅添加垂直虚线
+                // 仅添加垂直虚线，位置在交易日，但显示真实披露日期
                 earningsLines.push({
-                    name: formattedDate,
-                    xAxis: formattedDate,
+                    name: formattedDisplayDate,  // 显示真实披露日期
+                    xAxis: formattedAnnDate,     // 虚线位置在交易日
                     lineStyle: {
                         color: '#ff6b35',
                         type: 'dashed',
@@ -854,7 +875,7 @@ function renderChart(dates, klineData, stockInfo) {
                     },
                     label: {
                         show: true,
-                        formatter: '{b}',
+                        formatter: formattedDisplayDate,  // 显示真实披露日期
                         position: 'end',
                         color: isDark ? '#e0e0e0' : '#2c3e50',
                         fontSize: 12
@@ -921,15 +942,106 @@ function renderChart(dates, klineData, stockInfo) {
                      });
                      
                      if (earning) {
-                     tooltip.push('', '<strong style="color: #ff6b35;">📊 财报发布日</strong>');
-                     if (earning.basic_eps) {
-                         tooltip.push(`每股收益: ${earning.basic_eps}`);
-                     }
-                     if (earning.total_revenue) {
-                         tooltip.push(`营业收入: ${(earning.total_revenue / 100000000).toFixed(2)}亿`);
+                         // 根据end_date判断财报类型
+                         let reportType = '财报';
+                         if (earning.end_date) {
+                             const endDateStr = earning.end_date.toString();
+                             const monthDay = endDateStr.slice(4, 8);
+                             switch (monthDay) {
+                                 case '0331':
+                                     reportType = '一季报';
+                                     break;
+                                 case '0630':
+                                     reportType = '中报';
+                                     break;
+                                 case '0930':
+                                     reportType = '三季报';
+                                     break;
+                                 case '1231':
+                                     reportType = '年报';
+                                     break;
+                                 default:
+                                     reportType = '财报';
+                             }
+                         }
+                         
+                         tooltip.push('', `<strong style="color: #ff6b35;">📊 ${reportType}发布日</strong>`);
+                         if (earning.basic_eps) {
+                             tooltip.push(`每股收益: ${earning.basic_eps}`);
+                         }
+                         if (earning.total_revenue) {
+                             tooltip.push(`营业收入: ${(earning.total_revenue / 100000000).toFixed(2)}亿`);
+                         }
                      }
                  }
-                 }
+                
+                // 显示分红信息（基于年报披露日）
+                if (dividendData && dividendData.length > 0 && earningsData && earningsData.length > 0) {
+                    const currentDate = new Date(data.name);
+                    
+                    // 找到当前日期之前最近的年报披露日（只考虑年报，end_date以1231结尾）
+                    const sortedAnnualEarnings = earningsData
+                        .filter(e => {
+                            // 只筛选年报（end_date以1231结尾）
+                            const endDateStr = e.end_date ? e.end_date.toString() : '';
+                            if (!endDateStr.endsWith('1231')) return false;
+                            
+                            const disclosureDate = new Date(e.display_date ? 
+                                `${e.display_date.toString().slice(0,4)}-${e.display_date.toString().slice(4,6)}-${e.display_date.toString().slice(6,8)}` :
+                                `${e.ann_date.toString().slice(0,4)}-${e.ann_date.toString().slice(4,6)}-${e.ann_date.toString().slice(6,8)}`);
+                            return disclosureDate <= currentDate;
+                        })
+                        .sort((a, b) => {
+                            const dateA = a.display_date || a.ann_date;
+                            const dateB = b.display_date || b.ann_date;
+                            return dateB - dateA; // 降序排列，最近的在前
+                        });
+                    
+                    if (sortedAnnualEarnings.length > 0) {
+                        const latestAnnualEarning = sortedAnnualEarnings[0];
+                        const disclosureDate = new Date(latestAnnualEarning.display_date ? 
+                            `${latestAnnualEarning.display_date.toString().slice(0,4)}-${latestAnnualEarning.display_date.toString().slice(4,6)}-${latestAnnualEarning.display_date.toString().slice(6,8)}` :
+                            `${latestAnnualEarning.ann_date.toString().slice(0,4)}-${latestAnnualEarning.ann_date.toString().slice(4,6)}-${latestAnnualEarning.ann_date.toString().slice(6,8)}`);
+                        
+                        // 基于年报披露日计算应显示的分红年度
+                        // 年报披露日当日显示前一年分红，年报披露日的下一个交易日开始才显示当年分红
+                        const reportYear = parseInt(latestAnnualEarning.end_date.toString().slice(0, 4));
+                        
+                        // 判断当前日期是否为年报披露日当日
+                        const isDisclosureDay = currentDate.toDateString() === disclosureDate.toDateString();
+                        
+                        // 如果是年报披露日当日，显示前一年分红；否则显示当年分红
+                        const dividendYear = isDisclosureDay ? reportYear - 1 : reportYear;
+                        
+                        // 查找该年度的所有分红记录
+                        const yearDividends = dividendData.filter(d => {
+                            if (!d.end_date) return false;
+                            const endDateStr = d.end_date.toString();
+                            const endYear = parseInt(endDateStr.slice(0, 4));
+                            return endYear === dividendYear;
+                        });
+                        
+                        if (yearDividends.length > 0) {
+                            // 计算累计分红
+                            const totalDividend = yearDividends.reduce((sum, d) => {
+                                return sum + (parseFloat(d.cash_div) || 0);
+                            }, 0);
+                            
+                            if (totalDividend > 0) {
+                                tooltip.push('', '<strong style="color: #4CAF50;">💰 分红信息</strong>');
+                                tooltip.push(`${dividendYear}年累计分红: ${totalDividend.toFixed(4)}元/股`);
+                                
+                                // 计算静态股息率
+                                if (close && close > 0 && !isNaN(close)) {
+                                    const dividendYield = (totalDividend / close * 100).toFixed(2);
+                                    tooltip.push(`静态股息率: ${dividendYield}%`);
+                                }
+                                
+                                tooltip.push(`<span style="font-size: 11px; color: #888;">基于${disclosureDate.getFullYear()}年${disclosureDate.getMonth()+1}月${disclosureDate.getDate()}日披露</span>`);
+                            }
+                        }
+                    }
+                }
                 
                 return tooltip.join('<br/>');
             },
