@@ -13,8 +13,8 @@
     </button>
     <div class="container">
         <div class="header">
-            <div class="title">股票K线图分析</div>
-            <div class="subtitle">数据来源：MoneyMore API | 更新时间：<span id="updateTime"></span></div>
+            <div class="title" id="pageTitle">股票数据分析</div>
+            <div class="subtitle">数据来源：Tushare | 更新时间：<span id="updateTime"></span></div>
         </div>
         
         <div class="controls">
@@ -28,23 +28,27 @@
             <div class="control-group">
                 <label for="periodSelect">时间跨度：</label>
                 <select id="periodSelect">
-                    <option value="1M">1个月</option>
-                    <option value="3M">3个月</option>
-                    <option value="6M">6个月</option>
                     <option value="1Y" selected>1年</option>
                     <option value="2Y">2年</option>
+                    <option value="3Y">3年</option>
+                    <option value="4Y">4年</option>
                     <option value="5Y">5年</option>
+                    <option value="6Y">6年</option>
+                    <option value="7Y">7年</option>
+                    <option value="8Y">8年</option>
+                    <option value="9Y">9年</option>
+                    <option value="10Y">10年</option>
                 </select>
             </div>
             <div class="control-group">
                 <label for="adjSelect">复权方式：</label>
                 <select id="adjSelect">
-                    <option value="qfq">前复权</option>
+                    <option value="qfq" selected>前复权</option>
                     <option value="hfq">后复权</option>
-                    <option value="" selected>不复权</option>
+                    <option value="">不复权</option>
                 </select>
             </div>
-            <button id="updateBtn">更新数据</button>
+
         </div>
         
         <div id="chart">

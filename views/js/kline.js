@@ -22,7 +22,7 @@ let stockList = [];
 let selectedStockIndex = -1;
 
 // 初始化页面
-function initPage() {
+async function initPage() {
     // 初始化图表
     initChart();
     
@@ -32,8 +32,8 @@ function initPage() {
     // 初始化主题切换
     initThemeToggle();
     
-    // 加载股票列表
-    loadStockList();
+    // 先加载股票列表，确保股票名称可以正确显示
+    await loadStockList();
     
     // 加载默认数据
     loadKlineData();
@@ -67,8 +67,9 @@ function initControls() {
     // 键盘导航
     stockSearch.addEventListener('keydown', handleKeyNavigation);
     
-    // 更新按钮
-    document.getElementById('updateBtn').addEventListener('click', loadKlineData);
+    // 时间跨度和复权方式改变时自动更新
+    document.getElementById('periodSelect').addEventListener('change', loadKlineData);
+    document.getElementById('adjSelect').addEventListener('change', loadKlineData);
 }
 
 // 初始化主题切换
@@ -130,8 +131,16 @@ async function searchStocks(query) {
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-        const stocks = await response.json();
-        return stocks;
+        const result = await response.json();
+        // 确保返回数组格式
+        if (result && Array.isArray(result.data)) {
+            return result.data;
+        } else if (Array.isArray(result)) {
+            return result;
+        } else {
+            console.warn('API返回格式异常:', result);
+            return [];
+        }
     } catch (error) {
         console.error('搜索股票失败:', error);
         return [];
@@ -380,23 +389,35 @@ function calculateDateRange(period) {
     const startDate = new Date();
     
     switch (period) {
-        case '1M':
-            startDate.setMonth(endDate.getMonth() - 1);
-            break;
-        case '3M':
-            startDate.setMonth(endDate.getMonth() - 3);
-            break;
-        case '6M':
-            startDate.setMonth(endDate.getMonth() - 6);
-            break;
         case '1Y':
             startDate.setFullYear(endDate.getFullYear() - 1);
             break;
         case '2Y':
             startDate.setFullYear(endDate.getFullYear() - 2);
             break;
+        case '3Y':
+            startDate.setFullYear(endDate.getFullYear() - 3);
+            break;
+        case '4Y':
+            startDate.setFullYear(endDate.getFullYear() - 4);
+            break;
         case '5Y':
             startDate.setFullYear(endDate.getFullYear() - 5);
+            break;
+        case '6Y':
+            startDate.setFullYear(endDate.getFullYear() - 6);
+            break;
+        case '7Y':
+            startDate.setFullYear(endDate.getFullYear() - 7);
+            break;
+        case '8Y':
+            startDate.setFullYear(endDate.getFullYear() - 8);
+            break;
+        case '9Y':
+            startDate.setFullYear(endDate.getFullYear() - 9);
+            break;
+        case '10Y':
+            startDate.setFullYear(endDate.getFullYear() - 10);
             break;
         default:
             startDate.setFullYear(endDate.getFullYear() - 1);
@@ -498,19 +519,17 @@ function showStats(stockInfo) {
 function renderChart(dates, klineData, stockInfo) {
     hideLoading();
     
+    // 更新页面主标题为当前股票名称
+    const pageTitle = document.getElementById('pageTitle');
+    if (pageTitle) {
+        pageTitle.textContent = stockInfo.name;
+    }
+    
     const isDark = document.body.classList.contains('dark-mode');
     
     const option = {
         backgroundColor: isDark ? '#2d2d2d' : '#fff',
-        title: {
-            text: `${stockInfo.name} K线图`,
-            left: 'center',
-            textStyle: {
-                fontSize: 18,
-                fontWeight: 'bold',
-                color: isDark ? '#e0e0e0' : '#2c3e50'
-            }
-        },
+        // 移除图表标题，不在图表上方显示股票名称
         tooltip: {
             trigger: 'axis',
             axisPointer: {

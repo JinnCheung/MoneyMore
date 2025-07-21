@@ -185,6 +185,14 @@ body.dark-mode #updateBtn:hover {
     min-width: 120px;
 }
 
+#periodSelect {
+    min-width: 80px;
+}
+
+#adjSelect {
+    min-width: 80px;
+}
+
 .stock-search-container {
     position: relative;
     min-width: 200px;
@@ -208,16 +216,18 @@ body.dark-mode #updateBtn:hover {
     border: 1px solid #ddd;
     border-top: none;
     border-radius: 0 0 4px 4px;
-    max-height: 200px;
+    max-height: 300px;
     overflow-y: auto;
     z-index: 1000;
     display: none;
+    font-size: 12px;
 }
 
 .stock-option {
-    padding: 8px 12px;
+    padding: 6px 10px;
     cursor: pointer;
     border-bottom: 1px solid #f0f0f0;
+    font-size: 12px;
 }
 
 .stock-option:hover {
@@ -232,16 +242,18 @@ body.dark-mode #updateBtn:hover {
 .stock-option-code {
     font-weight: bold;
     color: #666;
+    font-size: 11px;
 }
 
 .stock-option-name {
-    margin-left: 8px;
+    margin-left: 6px;
+    font-size: 11px;
 }
 
 .stock-option-info {
-    font-size: 12px;
+    font-size: 10px;
     color: #999;
-    margin-left: 8px;
+    margin-left: 6px;
 }
 
 #updateBtn {

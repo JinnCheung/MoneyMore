@@ -460,8 +460,13 @@ def search_stocks():
         
         # 如果没有查询条件，返回前N个活跃股票
         if not query:
-            # 过滤掉退市股票，按市值排序
-            active_stocks = df[df['list_status'] == 'L'].head(limit)
+            # 过滤掉退市股票（如果有list_status字段的话）
+            if 'list_status' in df.columns:
+                active_stocks = df[df['list_status'] == 'L'].head(limit)
+            else:
+                # 如果没有list_status字段，直接取前N个
+                active_stocks = df.head(limit)
+            
             result = []
             for _, row in active_stocks.iterrows():
                 result.append({
@@ -470,27 +475,36 @@ def search_stocks():
                     'industry': row.get('industry', ''),
                     'area': row.get('area', ''),
                     'market': row.get('market', ''),
-                    'list_date': row.get('list_date', '')
+                    'list_date': row.get('list_date', ''),
+                    'cnspell': row.get('cnspell', '')  # 返回拼音缩写信息
                 })
-            return jsonify(result)
+            return jsonify({
+                'success': True,
+                'message': '获取股票列表成功',
+                'data': result,
+                'count': len(result)
+            })
         
         # 进行搜索匹配
         query_lower = query.lower()
         matched_stocks = []
         
         for _, row in df.iterrows():
-            # 跳过退市股票
-            if row.get('list_status') != 'L':
+            # 跳过退市股票（如果有list_status字段的话）
+            if 'list_status' in df.columns and row.get('list_status') != 'L':
                 continue
                 
             ts_code = str(row['ts_code']).lower()
             name = str(row['name']).lower()
+            cnspell = str(row.get('cnspell', '')).lower()  # 获取拼音缩写
             
-            # 匹配股票代码或名称
+            # 匹配股票代码、名称或拼音缩写
             if (query_lower in ts_code or 
                 query_lower in name or
+                query_lower in cnspell or  # 支持拼音缩写搜索
                 query in str(row['ts_code']) or
-                query in str(row['name'])):
+                query in str(row['name']) or
+                query in str(row.get('cnspell', ''))):
                 
                 matched_stocks.append({
                     'code': row['ts_code'],
@@ -498,14 +512,20 @@ def search_stocks():
                     'industry': row.get('industry', ''),
                     'area': row.get('area', ''),
                     'market': row.get('market', ''),
-                    'list_date': row.get('list_date', '')
+                    'list_date': row.get('list_date', ''),
+                    'cnspell': row.get('cnspell', '')  # 返回拼音缩写信息
                 })
                 
                 # 限制返回数量
                 if len(matched_stocks) >= limit:
                     break
         
-        return jsonify(matched_stocks)
+        return jsonify({
+            'success': True,
+            'message': f'找到 {len(matched_stocks)} 个匹配结果',
+            'data': matched_stocks,
+            'count': len(matched_stocks)
+        })
         
     except Exception as e:
         return jsonify({
