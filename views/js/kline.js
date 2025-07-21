@@ -76,6 +76,7 @@ let selectedStockIndex = -1;
 let earningsData = null;
 let tradingCalendar = null;
 let showEarnings = false;
+let currentStockInfo = null; // 存储当前股票的基础信息
 
 // 初始化页面
 async function initPage() {
@@ -98,8 +99,28 @@ async function initPage() {
     // 先加载股票列表，确保股票名称可以正确显示
     await loadStockList();
     
+    // 为默认股票加载基础信息
+    await loadDefaultStockInfo();
+    
     // 加载默认数据
     loadKlineData();
+}
+
+// 加载默认股票基础信息
+async function loadDefaultStockInfo() {
+    try {
+        const response = await fetch(`${CONFIG.API_BASE_URL}/stock_basic`);
+        const data = await response.json();
+        
+        if (data.success && data.data) {
+            currentStockInfo = data.data.find(stock => stock.ts_code === CONFIG.DEFAULT_STOCK);
+            if (currentStockInfo && currentStockInfo.list_date) {
+                updateStartYearOptions(currentStockInfo.list_date);
+            }
+        }
+    } catch (error) {
+        console.error('获取默认股票基础信息失败:', error);
+    }
 }
 
 // 初始化控件
@@ -130,7 +151,8 @@ function initControls() {
     // 键盘导航
     stockSearch.addEventListener('keydown', handleKeyNavigation);
     
-    // 时间跨度和复权方式改变时自动更新
+    // 时间跨度、复权方式和起始年份改变时自动更新
+    document.getElementById('startYearSelect').addEventListener('change', loadKlineData);
     document.getElementById('periodSelect').addEventListener('change', loadKlineData);
     document.getElementById('adjSelect').addEventListener('change', loadKlineData);
     
@@ -241,6 +263,28 @@ async function loadStockList() {
     }
 }
 
+// 更新起始年份选择器
+function updateStartYearOptions(listDate) {
+    const startYearSelect = document.getElementById('startYearSelect');
+    const currentYear = new Date().getFullYear();
+    
+    // 清空现有选项
+    startYearSelect.innerHTML = '<option value="auto" selected>自动</option>';
+    
+    if (listDate) {
+        // 解析上市日期 (格式: YYYYMMDD)
+        const listYear = parseInt(listDate.toString().substring(0, 4));
+        
+        // 从上市年份到当前年份生成选项
+        for (let year = listYear; year <= currentYear; year++) {
+            const option = document.createElement('option');
+            option.value = year.toString();
+            option.textContent = `${year}年`;
+            startYearSelect.appendChild(option);
+        }
+    }
+}
+
 // 处理股票搜索
 function handleStockSearch(e) {
     const query = e.target.value.trim();
@@ -307,6 +351,21 @@ async function selectStock(option) {
     hideStockDropdown();
     
     console.log(`选择股票: ${code} ${name}`);
+    
+    // 获取股票基础信息
+    try {
+        const response = await fetch(`${CONFIG.API_BASE_URL}/stock_basic`);
+        const data = await response.json();
+        
+        if (data.success && data.data) {
+            currentStockInfo = data.data.find(stock => stock.ts_code === code);
+            if (currentStockInfo && currentStockInfo.list_date) {
+                updateStartYearOptions(currentStockInfo.list_date);
+            }
+        }
+    } catch (error) {
+        console.error('获取股票基础信息失败:', error);
+    }
     
     // 选择股票后直接加载K线数据
     await loadKlineData();
@@ -409,8 +468,11 @@ async function loadKlineData() {
         const period = document.getElementById('periodSelect').value || '1Y';
         const adj = document.getElementById('adjSelect').value || '';
         
+        // 获取起始年份
+        const startYear = document.getElementById('startYearSelect').value || 'auto';
+        
         // 计算日期范围
-        const { startDate, endDate } = calculateDateRange(period);
+        const { startDate, endDate } = calculateDateRange(period, startYear);
         const startDateStr = formatDate(startDate);
         const endDateStr = formatDate(endDate);
         
@@ -459,21 +521,77 @@ async function loadKlineData() {
         updateTimeDisplay();
         renderChart(dates, klineData, stockInfo);
 
-        // 根据时间跨度动态设置dataZoom
-         const years = parseInt(period.replace('Y', ''));
-         const dataLength = dates.length;
-         if (dataLength > 0) {
-             const daysPerYear = 252; // 估算每年交易日
-             const daysToShow = years * daysPerYear;
-             const startIndex = Math.max(0, dataLength - daysToShow);
-             const startPercent = (startIndex / dataLength) * 100;
- 
-             chart.dispatchAction({
-                 type: 'dataZoom',
-                 start: startPercent,
-                 end: 100
-             });
-         }
+        // 根据起始年份和时间跨度动态设置dataZoom
+        const selectedStartYear = document.getElementById('startYearSelect').value;
+        const dataLength = dates.length;
+        
+        if (dataLength > 0) {
+            let startPercent = 0;
+            let endPercent = 100;
+            
+            if (selectedStartYear === 'auto') {
+                // 自动模式：显示最后几年的数据
+                const years = parseInt(period.replace('Y', ''));
+                const daysPerYear = 252; // 估算每年交易日
+                const daysToShow = years * daysPerYear;
+                const startIndex = Math.max(0, dataLength - daysToShow);
+                startPercent = (startIndex / dataLength) * 100;
+                endPercent = 100; // 自动模式显示到最新数据
+            } else {
+                // 指定年份模式：根据起始年份和时间跨度计算显示范围
+                const selectedYear = parseInt(selectedStartYear);
+                const years = parseInt(period.replace('Y', ''));
+                const endYear = selectedYear + years;
+                const currentYear = new Date().getFullYear();
+                
+                // 计算起始日期在数据中的位置
+                let targetStartDate;
+                if (currentStockInfo && currentStockInfo.list_date) {
+                    const listYear = parseInt(currentStockInfo.list_date.toString().substring(0, 4));
+                    if (selectedYear === listYear) {
+                        // 使用上市日期
+                        const listDateStr = currentStockInfo.list_date.toString();
+                        targetStartDate = `${listDateStr.substring(0, 4)}-${listDateStr.substring(4, 6)}-${listDateStr.substring(6, 8)}`;
+                    } else {
+                        targetStartDate = `${selectedYear}-01-01`;
+                    }
+                } else {
+                    targetStartDate = `${selectedYear}-01-01`;
+                }
+                
+                // 计算结束日期，但不能超过当前日期
+                const currentDate = new Date().toISOString().split('T')[0];
+                const calculatedEndDate = `${endYear}-12-31`;
+                const targetEndDate = calculatedEndDate <= currentDate ? calculatedEndDate : currentDate;
+                
+                // 在dates数组中找到对应的索引
+                let startIndex = dates.findIndex(date => date >= targetStartDate);
+                let endIndex = dates.findIndex(date => date > targetEndDate);
+                
+                if (startIndex === -1) startIndex = 0;
+                if (endIndex === -1) {
+                    // 如果结束日期超出数据范围，使用数据的最后日期
+                    endIndex = dates.length - 1;
+                } else {
+                    // 确保不超出数据范围
+                    endIndex = Math.min(endIndex, dates.length - 1);
+                }
+                
+                startPercent = (startIndex / dataLength) * 100;
+                endPercent = (endIndex / dataLength) * 100;
+                
+                // 确保显示范围合理
+                if (endPercent <= startPercent) {
+                    endPercent = Math.min(100, startPercent + 20); // 至少显示20%的数据
+                }
+            }
+            
+            chart.dispatchAction({
+                type: 'dataZoom',
+                start: startPercent,
+                end: endPercent
+            });
+        }
         
         console.log(`✅ 成功加载 ${stockResult.data.length} 条数据`);
         
@@ -484,43 +602,94 @@ async function loadKlineData() {
 }
 
 // 计算日期范围
-function calculateDateRange(period) {
-    const endDate = new Date();
-    const startDate = new Date();
+function calculateDateRange(period, startYear) {
+    let endDate = new Date();
+    let startDate = new Date();
     
-    switch (period) {
-        case '1Y':
-            startDate.setFullYear(endDate.getFullYear() - 1);
-            break;
-        case '2Y':
-            startDate.setFullYear(endDate.getFullYear() - 2);
-            break;
-        case '3Y':
-            startDate.setFullYear(endDate.getFullYear() - 3);
-            break;
-        case '4Y':
-            startDate.setFullYear(endDate.getFullYear() - 4);
-            break;
-        case '5Y':
-            startDate.setFullYear(endDate.getFullYear() - 5);
-            break;
-        case '6Y':
-            startDate.setFullYear(endDate.getFullYear() - 6);
-            break;
-        case '7Y':
-            startDate.setFullYear(endDate.getFullYear() - 7);
-            break;
-        case '8Y':
-            startDate.setFullYear(endDate.getFullYear() - 8);
-            break;
-        case '9Y':
-            startDate.setFullYear(endDate.getFullYear() - 9);
-            break;
-        case '10Y':
-            startDate.setFullYear(endDate.getFullYear() - 10);
-            break;
-        default:
-            startDate.setFullYear(endDate.getFullYear() - 1);
+    if (startYear === 'auto' || !startYear) {
+        // 自动模式：根据选择的时间跨度设置起始日期，结束日期为当前日期
+        switch (period) {
+            case '1Y':
+                startDate.setFullYear(endDate.getFullYear() - 1);
+                break;
+            case '2Y':
+                startDate.setFullYear(endDate.getFullYear() - 2);
+                break;
+            case '3Y':
+                startDate.setFullYear(endDate.getFullYear() - 3);
+                break;
+            case '4Y':
+                startDate.setFullYear(endDate.getFullYear() - 4);
+                break;
+            case '5Y':
+                startDate.setFullYear(endDate.getFullYear() - 5);
+                break;
+            case '6Y':
+                startDate.setFullYear(endDate.getFullYear() - 6);
+                break;
+            case '7Y':
+                startDate.setFullYear(endDate.getFullYear() - 7);
+                break;
+            case '8Y':
+                startDate.setFullYear(endDate.getFullYear() - 8);
+                break;
+            case '9Y':
+                startDate.setFullYear(endDate.getFullYear() - 9);
+                break;
+            case '10Y':
+                startDate.setFullYear(endDate.getFullYear() - 10);
+                break;
+            default:
+                startDate.setFullYear(endDate.getFullYear() - 1);
+        }
+    } else {
+        // 指定年份模式：根据起始年份和时间跨度计算起始和结束日期
+        const selectedYear = parseInt(startYear);
+        const years = parseInt(period.replace('Y', ''));
+        const calculatedEndYear = selectedYear + years - 1; // 修正：1年跨度应该是同一年，2年跨度是下一年
+        const currentYear = new Date().getFullYear();
+        
+        // 如果选择的是上市年份且有上市日期信息，使用上市日期
+        if (currentStockInfo && currentStockInfo.list_date) {
+            const listYear = parseInt(currentStockInfo.list_date.toString().substring(0, 4));
+            if (selectedYear === listYear) {
+                // 使用上市日期作为起始日期
+                const listDateStr = currentStockInfo.list_date.toString();
+                startDate = new Date(
+                    parseInt(listDateStr.substring(0, 4)),
+                    parseInt(listDateStr.substring(4, 6)) - 1,
+                    parseInt(listDateStr.substring(6, 8))
+                );
+            } else {
+                // 使用选择年份的1月1日
+                startDate = new Date(selectedYear, 0, 1);
+            }
+        } else {
+            // 没有上市日期信息，使用选择年份的1月1日
+            startDate = new Date(selectedYear, 0, 1);
+        }
+        
+        // 计算结束日期：从起始日期开始计算满跨度时间
+        const tempEndDate = new Date(startDate);
+        tempEndDate.setFullYear(tempEndDate.getFullYear() + years);
+        
+        // 如果计算出的结束日期超过当前日期，使用当前日期，但确保至少有满跨度数据
+        const currentDate = new Date();
+        if (tempEndDate > currentDate) {
+            // 检查从起始日期到当前日期是否已经满足选择的跨度
+            const fullSpanFromStart = new Date(startDate);
+            fullSpanFromStart.setFullYear(fullSpanFromStart.getFullYear() + years);
+            
+            if (fullSpanFromStart <= currentDate) {
+                // 如果已经满足跨度要求，使用当前日期
+                endDate = currentDate;
+            } else {
+                // 如果不足跨度要求，使用满跨度的日期
+                endDate = fullSpanFromStart;
+            }
+        } else {
+            endDate = tempEndDate;
+        }
     }
     
     return { startDate, endDate };

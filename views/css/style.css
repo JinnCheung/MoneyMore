@@ -184,6 +184,10 @@ body.dark-mode #updateBtn:hover {
     min-width: 120px;
 }
 
+#startYearSelect {
+    min-width: 80px;
+}
+
 #periodSelect {
     min-width: 80px;
 }
