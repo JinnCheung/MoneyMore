@@ -137,33 +137,15 @@ function initControls() {
     // 财报标记开关
     const earningsToggle = document.getElementById('earningsToggle');
     earningsToggle.addEventListener('change', (e) => {
-    showEarnings = e.target.checked;
-    if (chart) {
-        if (showEarnings) {
-            // 显示财报标记
-            updateEarningsMarks(true);
-        } else {
-            // 隐藏财报标记
-            updateEarningsMarks(false);
-        }
-    }
-});
+        showEarnings = e.target.checked;
 
-// 新增函数：更新财报标记的显示状态
-function updateEarningsMarks(show) {
-    if (!chart) return;
-    const option = chart.getOption();
-    if (!option) return;
-
-    // 假设财报标记在series中，名称为'earningsMarks'和'earningsLines'
-    option.series.forEach(series => {
-        if (series.name === 'earningsMarks' || series.name === 'earningsLines') {
-            series.show = show;
+        if (showEarnings && (!earningsData || earningsData.length === 0)) {
+            loadKlineData();
+        } else if (chart) {
+            // 重新渲染图表以应用开关状态
+            loadKlineData();
         }
     });
-
-    chart.setOption(option, true);
-}
 }
 
 // 初始化主题切换
@@ -219,9 +201,7 @@ function updateTimeDisplay() {
 // 搜索股票（支持股票代码、名称、拼音缩写）
 async function searchStocks(query) {
     try {
-        const { protocol, hostname, port } = window.location;
-        const baseUrl = `${protocol}//${hostname}${port ? ':' + port : ''}`;
-        const response = await fetch(`${baseUrl}/api/search_stocks?q=${encodeURIComponent(query)}&limit=20`);
+        const response = await fetch(`${CONFIG.API_BASE_URL}/search_stocks?q=${encodeURIComponent(query)}&limit=20`);
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
@@ -408,7 +388,7 @@ function hideLoading() {
 // 显示错误信息
 function showError(message) {
     hideLoading();
-    const chartContainer = document.getElementById('klineChart');
+    const chartContainer = document.getElementById('chart');
     chartContainer.innerHTML = `
         <div class="error">
             <div>
@@ -442,60 +422,41 @@ async function loadKlineData() {
             url += `&adj=${adj}`;
         }
         
-        // 发起API请求
-        const response = await fetch(url);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        
-        if (!data.success) {
-            throw new Error(data.message || '获取数据失败');
-        }
-        
-        if (!data.data || data.data.length === 0) {
-            throw new Error('未获取到有效的股票数据');
-        }
-        
-        // 格式化数据并渲染图表
-        const { dates, klineData, stockInfo } = formatStockData(data.data);
-        
-        // 保存数据到全局变量，供财报标记使用
-        window.currentChartData = { dates, klineData, stockInfo };
-        
+        // 并行获取K线和财报数据
+        const [stockResponse, earningsResponse] = await Promise.all([
+            fetch(url),
+            fetch(`${CONFIG.API_BASE_URL}/earnings?ts_code=${currentStock}`)
+        ]);
 
-        
-        // 显示统计信息
-        showStats(stockInfo);
-        
-        // 更新时间显示
-        updateTimeDisplay();
-        
-        // 根据 showEarnings 状态决定是否加载财报数据
-        if (showEarnings) {
-            try {
-                const earningsResponse = await fetch(`${CONFIG.API_BASE_URL}/earnings?ts_code=${currentStock}`);
-                if (earningsResponse.ok) {
-                    const earningsResult = await earningsResponse.json();
-                    if (earningsResult.success && earningsResult.data) {
-                        earningsData = earningsResult.data;
-                        console.log(`✅ 加载了 ${earningsData.length} 条财报数据`);
-                    } else {
-                        earningsData = [];
-                    }
-                } else {
-                    earningsData = [];
-                }
-            } catch (error) {
-                console.warn('加载财报数据失败:', error);
-                earningsData = [];
+        // 处理K线数据
+        if (!stockResponse.ok) {
+            throw new Error(`K线数据请求失败: HTTP ${stockResponse.status}`);
+        }
+        const stockResult = await stockResponse.json();
+        if (!stockResult.success || !stockResult.data || stockResult.data.length === 0) {
+            throw new Error(stockResult.message || '未获取到有效的股票数据');
+        }
+
+        // 处理财报数据
+        if (earningsResponse.ok) {
+            const earningsResult = await earningsResponse.json();
+            if (earningsResult.success && earningsResult.data) {
+                earningsData = earningsResult.data;
+                console.log(`✅ 加载了 ${earningsData.length} 条财报数据`);
+            } else {
+                earningsData = []; // API成功但无数据
             }
         } else {
-            earningsData = [];
+            console.warn('加载财报数据失败:', earningsResponse.statusText);
+            earningsData = []; // API请求失败
         }
 
+        // 格式化数据并渲染图表
+        const { dates, klineData, stockInfo } = formatStockData(stockResult.data);
+        window.currentChartData = { dates, klineData, stockInfo };
+
+        showStats(stockInfo);
+        updateTimeDisplay();
         renderChart(dates, klineData, stockInfo);
 
         // 根据时间跨度动态设置dataZoom
@@ -514,7 +475,7 @@ async function loadKlineData() {
              });
          }
         
-        console.log(`✅ 成功加载 ${data.data.length} 条数据`);
+        console.log(`✅ 成功加载 ${stockResult.data.length} 条数据`);
         
     } catch (error) {
         console.error('加载K线数据失败:', error);
@@ -698,7 +659,6 @@ function renderChart(dates, klineData, stockInfo) {
     const earningsLines = [];
     
     if (showEarnings && earningsData && earningsData.length > 0) {
-        earningsLines.length = 0;
         earningsData.forEach(earning => {
             const dateStr = earning.ann_date.toString();
             const formattedDate = `${dateStr.slice(0,4)}-${dateStr.slice(4,6)}-${dateStr.slice(6,8)}`;
@@ -856,6 +816,8 @@ function renderChart(dates, klineData, stockInfo) {
 
 
                 markLine: {
+                    symbol: 'none',
+                    show: showEarnings && earningsLines.length > 0, // 只有开关打开且有数据时才显示
                     data: earningsLines,
                     silent: true
                 }

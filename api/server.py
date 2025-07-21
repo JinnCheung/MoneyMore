@@ -593,7 +593,7 @@ def find_next_trading_day(date_str, trading_days):
         return None
 
 
-@app.route('/api/search_stocks')
+@app.route(f'{API_PREFIX}/search_stocks')
 @handle_api_error
 def search_stocks():
     """
