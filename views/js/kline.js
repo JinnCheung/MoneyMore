@@ -906,15 +906,15 @@ function calculateConsecutiveDividendYears(currentYear, currentDate, earningsDat
     
     // 从当前年份开始向前检查连续分红情况
     while (true) {
-        // 检查该年度是否有分红记录
+        // 检查该年度是否有分红记录，只取状态为"实施"的记录
         const yearDividends = dividendData.filter(d => {
             if (!d.end_date) return false;
             const endDateStr = d.end_date.toString();
             const endYear = parseInt(endDateStr.slice(0, 4));
-            return endYear === checkYear;
+            return endYear === checkYear && d.div_proc === '实施';
         });
         
-        // 计算该年度的累计分红
+        // 计算该年度的累计分红（只计算实施状态的记录）
         const totalDividend = yearDividends.reduce((sum, d) => {
             return sum + (parseFloat(d.cash_div_tax) || 0);
         }, 0);
@@ -996,16 +996,16 @@ function calculateDividendYieldData(dates, stockData) {
             // 如果是年报披露日当日，显示前一年分红；否则显示当年分红
             const dividendYear = isDisclosureDay ? reportYear - 1 : reportYear;
             
-            // 查找该年度的所有分红记录
+            // 查找该年度的所有分红记录，只取状态为"实施"的记录
             const yearDividends = dividendData.filter(d => {
                 if (!d.end_date) return false;
                 const endDateStr = d.end_date.toString();
                 const endYear = parseInt(endDateStr.slice(0, 4));
-                return endYear === dividendYear;
+                return endYear === dividendYear && d.div_proc === '实施';
             });
             
             if (yearDividends.length > 0) {
-                // 计算累计分红（与tooltip逻辑完全一致）
+                // 计算累计分红（只计算实施状态的记录）
                 const totalDividend = yearDividends.reduce((sum, d) => {
                     return sum + (parseFloat(d.cash_div_tax) || 0);
                 }, 0);
@@ -1319,16 +1319,16 @@ function renderChart(dates, klineData, stockInfo) {
                         // 如果是年报披露日当日，显示前一年分红；否则显示当年分红
                         const dividendYear = isDisclosureDay ? reportYear - 1 : reportYear;
                         
-                        // 查找该年度的所有分红记录
+                        // 查找该年度的所有分红记录，只取状态为"实施"的记录
                         const yearDividends = dividendData.filter(d => {
                             if (!d.end_date) return false;
                             const endDateStr = d.end_date.toString();
                             const endYear = parseInt(endDateStr.slice(0, 4));
-                            return endYear === dividendYear;
+                            return endYear === dividendYear && d.div_proc === '实施';
                         });
                         
                         if (yearDividends.length > 0) {
-                            // 计算累计分红
+                            // 计算累计分红（只计算实施状态的记录）
                             const totalDividend = yearDividends.reduce((sum, d) => {
                                 return sum + (parseFloat(d.cash_div_tax) || 0);
                             }, 0);
