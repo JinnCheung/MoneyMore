@@ -945,6 +945,25 @@ function calculateDividendYieldData(dates, stockData) {
         return dates.map(() => null);
     }
     
+    // 预处理年报数据，按披露日期排序
+    const sortedAnnualEarnings = earningsData
+        .filter(e => {
+            // 只筛选年报（end_date以1231结尾）
+            const endDateStr = e.end_date ? e.end_date.toString() : '';
+            return endDateStr.endsWith('1231');
+        })
+        .map(e => {
+            const disclosureDate = new Date(e.display_date ? 
+                `${e.display_date.toString().slice(0,4)}-${e.display_date.toString().slice(4,6)}-${e.display_date.toString().slice(6,8)}` :
+                `${e.ann_date.toString().slice(0,4)}-${e.ann_date.toString().slice(4,6)}-${e.ann_date.toString().slice(6,8)}`);
+            return {
+                ...e,
+                disclosureDate: disclosureDate,
+                reportYear: parseInt(e.end_date.toString().slice(0, 4))
+            };
+        })
+        .sort((a, b) => a.disclosureDate - b.disclosureDate); // 按时间正序排列
+    
     dates.forEach((date, index) => {
         const currentData = stockData[index];
         if (!currentData) {
@@ -960,41 +979,23 @@ function calculateDividendYieldData(dates, stockData) {
             close = parseFloat(currentData.close); // 如果没有不复权数据，回退到当前数据
         }
         
-        // 使用与tooltip完全相同的逻辑计算累计分红
         const currentDate = new Date(date);
         
-        // 找到当前日期之前最近的年报披露日（只考虑年报，end_date以1231结尾）
-        const sortedAnnualEarnings = earningsData
-            .filter(e => {
-                // 只筛选年报（end_date以1231结尾）
-                const endDateStr = e.end_date ? e.end_date.toString() : '';
-                if (!endDateStr.endsWith('1231')) return false;
-                
-                const disclosureDate = new Date(e.display_date ? 
-                    `${e.display_date.toString().slice(0,4)}-${e.display_date.toString().slice(4,6)}-${e.display_date.toString().slice(6,8)}` :
-                    `${e.ann_date.toString().slice(0,4)}-${e.ann_date.toString().slice(4,6)}-${e.ann_date.toString().slice(6,8)}`);
-                return disclosureDate <= currentDate;
-            })
-            .sort((a, b) => {
-                const dateA = a.display_date || a.ann_date;
-                const dateB = b.display_date || b.ann_date;
-                return dateB - dateA; // 降序排列，最近的在前
-            });
+        // 找到当前日期之前最近的年报披露日
+        let latestAnnualEarning = null;
+        for (let i = sortedAnnualEarnings.length - 1; i >= 0; i--) {
+            if (sortedAnnualEarnings[i].disclosureDate <= currentDate) {
+                latestAnnualEarning = sortedAnnualEarnings[i];
+                break;
+            }
+        }
         
-        if (sortedAnnualEarnings.length > 0) {
-            const latestAnnualEarning = sortedAnnualEarnings[0];
-            const disclosureDate = new Date(latestAnnualEarning.display_date ? 
-                `${latestAnnualEarning.display_date.toString().slice(0,4)}-${latestAnnualEarning.display_date.toString().slice(4,6)}-${latestAnnualEarning.display_date.toString().slice(6,8)}` :
-                `${latestAnnualEarning.ann_date.toString().slice(0,4)}-${latestAnnualEarning.ann_date.toString().slice(4,6)}-${latestAnnualEarning.ann_date.toString().slice(6,8)}`);
-            
-            // 基于年报披露日计算应显示的分红年度（与tooltip逻辑完全一致）
-            const reportYear = parseInt(latestAnnualEarning.end_date.toString().slice(0, 4));
-            
+        if (latestAnnualEarning) {
             // 判断当前日期是否为年报披露日当日
-            const isDisclosureDay = currentDate.toDateString() === disclosureDate.toDateString();
+            const isDisclosureDay = currentDate.toDateString() === latestAnnualEarning.disclosureDate.toDateString();
             
             // 如果是年报披露日当日，显示前一年分红；否则显示当年分红
-            const dividendYear = isDisclosureDay ? reportYear - 1 : reportYear;
+            const dividendYear = isDisclosureDay ? latestAnnualEarning.reportYear - 1 : latestAnnualEarning.reportYear;
             
             // 查找该年度的所有分红记录，只取状态为"实施"的记录
             const yearDividends = dividendData.filter(d => {
