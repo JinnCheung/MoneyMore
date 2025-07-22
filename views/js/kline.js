@@ -79,6 +79,7 @@ let earningsData = null;
 let dividendData = null; // 存储分红数据
 let tradingCalendar = null;
 let showEarnings = false;
+let showDividendYield = false; // 控制股息率曲线显示
 let currentStockInfo = null; // 存储当前股票的基础信息
 
 // 初始化页面
@@ -167,6 +168,17 @@ function initControls() {
         if (showEarnings && (!earningsData || earningsData.length === 0)) {
             loadKlineData();
         } else if (chart) {
+            // 重新渲染图表以应用开关状态
+            loadKlineData();
+        }
+    });
+    
+    // 股息率曲线开关
+    const dividendYieldToggle = document.getElementById('dividendYieldToggle');
+    dividendYieldToggle.addEventListener('change', (e) => {
+        showDividendYield = e.target.checked;
+        
+        if (chart) {
             // 重新渲染图表以应用开关状态
             loadKlineData();
         }
@@ -724,6 +736,92 @@ function formatDate(date) {
 // 格式化股票数据
 // 全局变量存储原始股票数据
 let rawStockData = [];
+let dividendYieldData = []; // 存储股息率曲线数据
+
+// 计算股息率曲线数据
+function calculateDividendYieldData(dates, stockData) {
+    const yieldData = [];
+    
+    if (!dividendData || dividendData.length === 0 || !earningsData || earningsData.length === 0) {
+        return dates.map(() => null);
+    }
+    
+    dates.forEach((date, index) => {
+        const currentData = stockData[index];
+        if (!currentData) {
+            yieldData.push(null);
+            return;
+        }
+        
+        const close = parseFloat(currentData.close); // 收盘价
+        
+        // 使用与tooltip完全相同的逻辑计算累计分红
+        const currentDate = new Date(date);
+        
+        // 找到当前日期之前最近的年报披露日（只考虑年报，end_date以1231结尾）
+        const sortedAnnualEarnings = earningsData
+            .filter(e => {
+                // 只筛选年报（end_date以1231结尾）
+                const endDateStr = e.end_date ? e.end_date.toString() : '';
+                if (!endDateStr.endsWith('1231')) return false;
+                
+                const disclosureDate = new Date(e.display_date ? 
+                    `${e.display_date.toString().slice(0,4)}-${e.display_date.toString().slice(4,6)}-${e.display_date.toString().slice(6,8)}` :
+                    `${e.ann_date.toString().slice(0,4)}-${e.ann_date.toString().slice(4,6)}-${e.ann_date.toString().slice(6,8)}`);
+                return disclosureDate <= currentDate;
+            })
+            .sort((a, b) => {
+                const dateA = a.display_date || a.ann_date;
+                const dateB = b.display_date || b.ann_date;
+                return dateB - dateA; // 降序排列，最近的在前
+            });
+        
+        if (sortedAnnualEarnings.length > 0) {
+            const latestAnnualEarning = sortedAnnualEarnings[0];
+            const disclosureDate = new Date(latestAnnualEarning.display_date ? 
+                `${latestAnnualEarning.display_date.toString().slice(0,4)}-${latestAnnualEarning.display_date.toString().slice(4,6)}-${latestAnnualEarning.display_date.toString().slice(6,8)}` :
+                `${latestAnnualEarning.ann_date.toString().slice(0,4)}-${latestAnnualEarning.ann_date.toString().slice(4,6)}-${latestAnnualEarning.ann_date.toString().slice(6,8)}`);
+            
+            // 基于年报披露日计算应显示的分红年度（与tooltip逻辑完全一致）
+            const reportYear = parseInt(latestAnnualEarning.end_date.toString().slice(0, 4));
+            
+            // 判断当前日期是否为年报披露日当日
+            const isDisclosureDay = currentDate.toDateString() === disclosureDate.toDateString();
+            
+            // 如果是年报披露日当日，显示前一年分红；否则显示当年分红
+            const dividendYear = isDisclosureDay ? reportYear - 1 : reportYear;
+            
+            // 查找该年度的所有分红记录
+            const yearDividends = dividendData.filter(d => {
+                if (!d.end_date) return false;
+                const endDateStr = d.end_date.toString();
+                const endYear = parseInt(endDateStr.slice(0, 4));
+                return endYear === dividendYear;
+            });
+            
+            if (yearDividends.length > 0) {
+                // 计算累计分红（与tooltip逻辑完全一致）
+                const totalDividend = yearDividends.reduce((sum, d) => {
+                    return sum + (parseFloat(d.cash_div) || 0);
+                }, 0);
+                
+                // 计算静态股息率（与tooltip保持一致，乘以100转换为百分比）
+                if (close && close > 0 && !isNaN(close) && totalDividend > 0) {
+                    const yieldRate = (totalDividend / close * 100);
+                    yieldData.push(yieldRate);
+                } else {
+                    yieldData.push(null);
+                }
+            } else {
+                yieldData.push(null);
+            }
+        } else {
+            yieldData.push(null);
+        }
+    });
+    
+    return yieldData;
+}
 
 function formatStockData(stockData) {
     const dates = [];
@@ -732,7 +830,7 @@ function formatStockData(stockData) {
     // 按日期排序（从旧到新）
     stockData.sort((a, b) => a.trade_date - b.trade_date);
     
-    // 保存原始数据供tooltip使用
+    // 存储原始数据供tooltip使用
     rawStockData = stockData;
     
     let minPrice = Infinity;
@@ -773,6 +871,9 @@ function formatStockData(stockData) {
         maxPrice: maxPrice.toFixed(2),
         minPrice: minPrice.toFixed(2)
     };
+    
+    // 计算股息率曲线数据
+    dividendYieldData = calculateDividendYieldData(dates, stockData);
     
     return { dates, klineData, stockInfo };
 }
@@ -1054,7 +1155,7 @@ function renderChart(dates, klineData, stockInfo) {
         },
         grid: {
             left: '3%',
-            right: '4%',
+            right: showDividendYield ? '3%' : '2%',
             bottom: '15%',
             top: '15%',
             containLabel: true
@@ -1077,25 +1178,60 @@ function renderChart(dates, klineData, stockInfo) {
                 color: isDark ? '#b0b0b0' : '#7f8c8d'
             }
         },
-        yAxis: {
-            scale: true,
-            splitArea: {
-                show: true,
-                areaStyle: {
-                    color: isDark ? 
-                        ['rgba(68,68,68,0.1)', 'rgba(85,85,85,0.1)'] : 
-                        ['rgba(250,250,250,0.1)', 'rgba(200,200,200,0.1)']
+        yAxis: [
+            {
+                type: 'value',
+                scale: true,
+                position: 'left',
+                splitArea: {
+                    show: true,
+                    areaStyle: {
+                        color: isDark ? 
+                            ['rgba(68,68,68,0.1)', 'rgba(85,85,85,0.1)'] : 
+                            ['rgba(250,250,250,0.1)', 'rgba(200,200,200,0.1)']
+                    }
+                },
+                axisLine: {
+                    lineStyle: {
+                        color: isDark ? '#555' : '#bdc3c7'
+                    }
+                },
+                axisLabel: {
+                    color: isDark ? '#b0b0b0' : '#7f8c8d'
                 }
             },
-            axisLine: {
-                lineStyle: {
-                    color: isDark ? '#555' : '#bdc3c7'
+            {
+                type: 'value',
+                scale: true,
+                position: 'right',
+                show: showDividendYield,
+                name: '',
+                nameLocation: 'middle',
+                nameGap: 50,
+                nameTextStyle: {
+                    color: isDark ? '#b0b0b0' : '#7f8c8d',
+                    fontSize: 12
+                },
+                axisLine: {
+                    show: true,
+                    lineStyle: {
+                        color: isDark ? '#555' : '#bdc3c7'
+                    }
+                },
+                axisTick: {
+                    show: true
+                },
+                axisLabel: {
+                    color: isDark ? '#b0b0b0' : '#7f8c8d',
+                    formatter: function(value) {
+                        return value.toFixed(1) + '%';
+                    }
+                },
+                splitLine: {
+                    show: false
                 }
-            },
-            axisLabel: {
-                color: isDark ? '#b0b0b0' : '#7f8c8d'
             }
-        },
+        ],
         dataZoom: [
             {
                 type: 'inside'
@@ -1114,27 +1250,50 @@ function renderChart(dates, klineData, stockInfo) {
                 }
             }
         ],
-        series: [
-            {
-                name: stockInfo.name,
-                type: 'candlestick',
-                data: klineData,
-                itemStyle: {
-                    color: '#ef4444',      // 上涨颜色（红色）
-                    color0: '#22c55e',     // 下跌颜色（绿色）
-                    borderColor: '#ef4444',
-                    borderColor0: '#22c55e'
-                },
-
-
-                markLine: {
-                    symbol: 'none',
-                    show: showEarnings && earningsLines.length > 0, // 只有开关打开且有数据时才显示
-                    data: earningsLines,
-                    silent: true
+        series: (() => {
+            const seriesArray = [
+                {
+                    name: stockInfo.name,
+                    type: 'candlestick',
+                    yAxisIndex: 0,
+                    data: klineData,
+                    itemStyle: {
+                        color: '#ef4444',      // 上涨颜色（红色）
+                        color0: '#22c55e',     // 下跌颜色（绿色）
+                        borderColor: '#ef4444',
+                        borderColor0: '#22c55e'
+                    },
+                    markLine: {
+                        symbol: 'none',
+                        show: showEarnings && earningsLines.length > 0, // 只有开关打开且有数据时才显示
+                        data: earningsLines,
+                        silent: true
+                    }
                 }
+            ];
+            
+            // 只有当开关打开时才添加股息率曲线
+            if (showDividendYield) {
+                seriesArray.push({
+                    name: '静态股息率',
+                    type: 'line',
+                    yAxisIndex: 1,
+                    data: dividendYieldData,
+                    lineStyle: {
+                        color: '#3498db',
+                        width: 2
+                    },
+                    itemStyle: {
+                        color: '#3498db'
+                    },
+                    symbol: 'none',
+                    smooth: true,
+                    connectNulls: false
+                });
             }
-        ]
+            
+            return seriesArray;
+        })()
     };
     
     // 设置图表配置
