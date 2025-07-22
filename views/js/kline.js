@@ -1347,8 +1347,13 @@ function renderChart(dates, klineData, stockInfo) {
                                 
                                 // 计算静态股息率（使用不复权收盘价）
                                 let closeForDividendYield = close; // 默认使用当前收盘价
-                                if (rawStockDataNoAdj && rawStockDataNoAdj.length > currentIndex && rawStockDataNoAdj[currentIndex]) {
-                                    closeForDividendYield = parseFloat(rawStockDataNoAdj[currentIndex].close); // 使用不复权收盘价
+                                if (rawStockDataNoAdj && rawStockDataNoAdj.length > 0) {
+                                    // 根据交易日期查找对应的不复权数据
+                                    const tradeDateStr = data.name.replace(/-/g, ''); // 将YYYY-MM-DD格式转换为YYYYMMDD
+                                    const noAdjData = rawStockDataNoAdj.find(d => d.trade_date.toString() === tradeDateStr);
+                                    if (noAdjData) {
+                                        closeForDividendYield = parseFloat(noAdjData.close); // 使用不复权收盘价
+                                    }
                                 }
                                 
                                 if (closeForDividendYield && closeForDividendYield > 0 && !isNaN(closeForDividendYield)) {
