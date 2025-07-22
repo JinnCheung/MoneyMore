@@ -83,6 +83,7 @@ let tradingCalendar = null;
 let showEarnings = false;
 let showDividendYield = false; // 控制股息率曲线显示
 let currentStockInfo = null; // 存储当前股票的基础信息
+let rawStockDataNoAdj = []; // 存储不复权数据，用于计算股息率
 
 // 初始化页面
 async function initPage() {
@@ -501,9 +502,13 @@ async function loadKlineData() {
             url += `&adj=${adj}`;
         }
         
-        // 并行获取K线、财报、分红、财务指标和披露日期数据
-        const [stockResponse, earningsResponse, dividendResponse, finaIndicatorResponse, disclosureDateResponse] = await Promise.all([
+        // 构建不复权数据请求URL（用于计算股息率）
+        const noAdjUrl = `${CONFIG.API_BASE_URL}/stock_data?ts_code=${currentStock}&start_date=${startDateStr}&end_date=${endDateStr}`;
+        
+        // 并行获取K线、不复权K线、财报、分红、财务指标和披露日期数据
+        const [stockResponse, noAdjStockResponse, earningsResponse, dividendResponse, finaIndicatorResponse, disclosureDateResponse] = await Promise.all([
             fetch(url),
+            fetch(noAdjUrl),
             fetch(`${CONFIG.API_BASE_URL}/earnings?ts_code=${currentStock}`),
             fetch(`${CONFIG.API_BASE_URL}/dividend?ts_code=${currentStock}`),
             fetch(`${CONFIG.API_BASE_URL}/fina_indicator?ts_code=${currentStock}`),
@@ -517,6 +522,21 @@ async function loadKlineData() {
         const stockResult = await stockResponse.json();
         if (!stockResult.success || !stockResult.data || stockResult.data.length === 0) {
             throw new Error(stockResult.message || '未获取到有效的股票数据');
+        }
+        
+        // 处理不复权K线数据（用于计算股息率）
+        if (!noAdjStockResponse.ok) {
+            console.warn('不复权数据请求失败:', noAdjStockResponse.statusText);
+            rawStockDataNoAdj = []; // 如果获取失败，使用空数组
+        } else {
+            const noAdjStockResult = await noAdjStockResponse.json();
+            if (noAdjStockResult.success && noAdjStockResult.data) {
+                rawStockDataNoAdj = noAdjStockResult.data;
+                console.log(`✅ 加载了 ${rawStockDataNoAdj.length} 条不复权数据用于股息率计算`);
+            } else {
+                rawStockDataNoAdj = [];
+                console.warn('不复权数据为空');
+            }
         }
 
         // 处理财报数据
@@ -785,7 +805,13 @@ function calculateDividendYieldData(dates, stockData) {
             return;
         }
         
-        const close = parseFloat(currentData.close); // 收盘价
+        // 使用不复权数据的收盘价计算股息率
+        let close;
+        if (rawStockDataNoAdj && rawStockDataNoAdj.length > index && rawStockDataNoAdj[index]) {
+            close = parseFloat(rawStockDataNoAdj[index].close); // 使用不复权收盘价
+        } else {
+            close = parseFloat(currentData.close); // 如果没有不复权数据，回退到当前数据
+        }
         
         // 使用与tooltip完全相同的逻辑计算累计分红
         const currentDate = new Date(date);
@@ -1164,9 +1190,14 @@ function renderChart(dates, klineData, stockInfo) {
                                 tooltip.push('', '<strong style="color: #4CAF50;">💰 分红信息</strong>');
                                 tooltip.push(`${dividendYear}年累计分红: ${totalDividend.toFixed(4)}元/股`);
                                 
-                                // 计算静态股息率
-                                if (close && close > 0 && !isNaN(close)) {
-                                    const dividendYield = (totalDividend / close * 100).toFixed(2);
+                                // 计算静态股息率（使用不复权收盘价）
+                                let closeForDividendYield = close; // 默认使用当前收盘价
+                                if (rawStockDataNoAdj && rawStockDataNoAdj.length > currentIndex && rawStockDataNoAdj[currentIndex]) {
+                                    closeForDividendYield = parseFloat(rawStockDataNoAdj[currentIndex].close); // 使用不复权收盘价
+                                }
+                                
+                                if (closeForDividendYield && closeForDividendYield > 0 && !isNaN(closeForDividendYield)) {
+                                    const dividendYield = (totalDividend / closeForDividendYield * 100).toFixed(2);
                                     tooltip.push(`静态股息率: ${dividendYield}%`);
                                 }
                                 
