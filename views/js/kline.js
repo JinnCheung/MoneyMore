@@ -895,6 +895,48 @@ function formatDate(date) {
 let rawStockData = [];
 let dividendYieldData = []; // 存储股息率曲线数据
 
+// 计算连续分红年数
+function calculateConsecutiveDividendYears(currentYear, currentDate, earningsData, dividendData) {
+    if (!dividendData || !earningsData || dividendData.length === 0 || earningsData.length === 0) {
+        return 0;
+    }
+    
+    let consecutiveYears = 0;
+    let checkYear = currentYear;
+    
+    // 从当前年份开始向前检查连续分红情况
+    while (true) {
+        // 检查该年度是否有分红记录
+        const yearDividends = dividendData.filter(d => {
+            if (!d.end_date) return false;
+            const endDateStr = d.end_date.toString();
+            const endYear = parseInt(endDateStr.slice(0, 4));
+            return endYear === checkYear;
+        });
+        
+        // 计算该年度的累计分红
+        const totalDividend = yearDividends.reduce((sum, d) => {
+            return sum + (parseFloat(d.cash_div_tax) || 0);
+        }, 0);
+        
+        // 如果该年度有分红（大于0），则连续年数+1
+        if (totalDividend > 0) {
+            consecutiveYears++;
+            checkYear--; // 检查前一年
+        } else {
+            // 如果该年度没有分红，则中断连续性
+            break;
+        }
+        
+        // 防止无限循环，最多检查50年
+        if (consecutiveYears >= 50) {
+            break;
+        }
+    }
+    
+    return consecutiveYears;
+}
+
 // 计算股息率曲线数据
 function calculateDividendYieldData(dates, stockData) {
     const yieldData = [];
@@ -1304,6 +1346,12 @@ function renderChart(dates, klineData, stockInfo) {
                                 if (closeForDividendYield && closeForDividendYield > 0 && !isNaN(closeForDividendYield)) {
                                     const dividendYield = (totalDividend / closeForDividendYield * 100).toFixed(2);
                                     tooltip.push(`静态股息率: ${dividendYield}%`);
+                                }
+                                
+                                // 计算连续分红年数
+                                const consecutiveYears = calculateConsecutiveDividendYears(dividendYear, currentDate, earningsData, dividendData);
+                                if (consecutiveYears > 0) {
+                                    tooltip.push(`连续第${consecutiveYears}年分红`);
                                 }
                                 
                                 tooltip.push(`<span style="color: #9E9E9E; font-size: 12px;">基于${disclosureDate.getFullYear()}年${disclosureDate.getMonth()+1}月${disclosureDate.getDate()}日披露</span>`);
