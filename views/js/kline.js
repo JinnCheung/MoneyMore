@@ -860,7 +860,7 @@ function calculateDividendYieldData(dates, stockData) {
             if (yearDividends.length > 0) {
                 // 计算累计分红（与tooltip逻辑完全一致）
                 const totalDividend = yearDividends.reduce((sum, d) => {
-                    return sum + (parseFloat(d.cash_div) || 0);
+                    return sum + (parseFloat(d.cash_div_tax) || 0);
                 }, 0);
                 
                 // 计算静态股息率（与tooltip保持一致，乘以100转换为百分比）
@@ -1183,7 +1183,7 @@ function renderChart(dates, klineData, stockInfo) {
                         if (yearDividends.length > 0) {
                             // 计算累计分红
                             const totalDividend = yearDividends.reduce((sum, d) => {
-                                return sum + (parseFloat(d.cash_div) || 0);
+                                return sum + (parseFloat(d.cash_div_tax) || 0);
                             }, 0);
                             
                             if (totalDividend > 0) {
