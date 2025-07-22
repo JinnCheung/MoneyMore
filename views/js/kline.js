@@ -706,20 +706,17 @@ function calculateDateRange(period, startYear) {
             case '5Y':
                 startDate.setFullYear(endDate.getFullYear() - 5);
                 break;
-            case '6Y':
-                startDate.setFullYear(endDate.getFullYear() - 6);
-                break;
             case '7Y':
                 startDate.setFullYear(endDate.getFullYear() - 7);
                 break;
-            case '8Y':
-                startDate.setFullYear(endDate.getFullYear() - 8);
-                break;
-            case '9Y':
-                startDate.setFullYear(endDate.getFullYear() - 9);
-                break;
             case '10Y':
                 startDate.setFullYear(endDate.getFullYear() - 10);
+                break;
+            case '20Y':
+                startDate.setFullYear(endDate.getFullYear() - 20);
+                break;
+            case '30Y':
+                startDate.setFullYear(endDate.getFullYear() - 30);
                 break;
             default:
                 startDate.setFullYear(endDate.getFullYear() - 1);
