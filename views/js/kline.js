@@ -85,6 +85,92 @@ let showDividendYield = false; // 控制股息率曲线显示
 let currentStockInfo = null; // 存储当前股票的基础信息
 let rawStockDataNoAdj = []; // 存储不复权数据，用于计算股息率
 
+// 状态持久化函数
+function saveAppState() {
+    const state = {
+        currentStock: currentStock,
+        showEarnings: showEarnings,
+        showDividendYield: showDividendYield,
+        periodSelect: document.getElementById('periodSelect').value,
+        adjSelect: document.getElementById('adjSelect').value,
+        startYearSelect: document.getElementById('startYearSelect').value
+    };
+    localStorage.setItem('moneyMoreAppState', JSON.stringify(state));
+}
+
+function loadAppState() {
+    try {
+        const savedState = localStorage.getItem('moneyMoreAppState');
+        if (savedState) {
+            const state = JSON.parse(savedState);
+            
+            // 恢复股票选择
+            if (state.currentStock) {
+                currentStock = state.currentStock;
+            }
+            
+            // 恢复开关状态
+            if (typeof state.showEarnings === 'boolean') {
+                showEarnings = state.showEarnings;
+            }
+            if (typeof state.showDividendYield === 'boolean') {
+                showDividendYield = state.showDividendYield;
+            }
+            
+            return state;
+        }
+    } catch (error) {
+        console.error('恢复应用状态失败:', error);
+    }
+    return null;
+}
+
+function restoreUIState(state) {
+    // 恢复下拉框选择
+    if (state.periodSelect) {
+        const periodSelect = document.getElementById('periodSelect');
+        if (periodSelect) {
+            periodSelect.value = state.periodSelect;
+        }
+    }
+    
+    if (state.adjSelect) {
+        const adjSelect = document.getElementById('adjSelect');
+        if (adjSelect) {
+            adjSelect.value = state.adjSelect;
+        }
+    }
+    
+    if (state.startYearSelect) {
+        const startYearSelect = document.getElementById('startYearSelect');
+        if (startYearSelect) {
+            startYearSelect.value = state.startYearSelect;
+        }
+    }
+    
+    // 恢复开关状态
+    const earningsToggle = document.getElementById('earningsToggle');
+    if (earningsToggle) {
+        earningsToggle.checked = showEarnings;
+    }
+    
+    const dividendYieldToggle = document.getElementById('dividendYieldToggle');
+    if (dividendYieldToggle) {
+        dividendYieldToggle.checked = showDividendYield;
+    }
+    
+    // 恢复股票输入框显示
+    const stockInput = document.getElementById('stockInput');
+    if (stockInput && currentStock) {
+        const stockName = getStockName(currentStock);
+        if (stockName) {
+            stockInput.value = `${stockName} (${currentStock})`;
+        } else {
+            stockInput.value = currentStock;
+        }
+    }
+}
+
 // 初始化页面
 async function initPage() {
     // 首先初始化API URL
@@ -93,6 +179,9 @@ async function initPage() {
         console.error('❌ API初始化失败，无法继续');
         return;
     }
+    
+    // 加载保存的状态
+    const savedState = loadAppState();
     
     // 初始化图表
     initChart();
@@ -105,6 +194,11 @@ async function initPage() {
     
     // 先加载股票列表，确保股票名称可以正确显示
     await loadStockList();
+    
+    // 恢复UI状态
+    if (savedState) {
+        restoreUIState(savedState);
+    }
     
     // 为默认股票加载基础信息
     await loadDefaultStockInfo();
@@ -159,14 +253,24 @@ function initControls() {
     stockSearch.addEventListener('keydown', handleKeyNavigation);
     
     // 时间跨度、复权方式和起始年份改变时自动更新
-    document.getElementById('startYearSelect').addEventListener('change', loadKlineData);
-    document.getElementById('periodSelect').addEventListener('change', loadKlineData);
-    document.getElementById('adjSelect').addEventListener('change', loadKlineData);
+    document.getElementById('startYearSelect').addEventListener('change', () => {
+        saveAppState();
+        loadKlineData();
+    });
+    document.getElementById('periodSelect').addEventListener('change', () => {
+        saveAppState();
+        loadKlineData();
+    });
+    document.getElementById('adjSelect').addEventListener('change', () => {
+        saveAppState();
+        loadKlineData();
+    });
     
     // 财报标记开关
     const earningsToggle = document.getElementById('earningsToggle');
     earningsToggle.addEventListener('change', (e) => {
         showEarnings = e.target.checked;
+        saveAppState();
 
         if (showEarnings && (!earningsData || earningsData.length === 0)) {
             loadKlineData();
@@ -180,6 +284,7 @@ function initControls() {
     const dividendYieldToggle = document.getElementById('dividendYieldToggle');
     dividendYieldToggle.addEventListener('change', (e) => {
         showDividendYield = e.target.checked;
+        saveAppState();
         
         if (chart) {
             // 重新渲染图表以应用开关状态
@@ -369,6 +474,9 @@ async function selectStock(option) {
     hideStockDropdown();
     
     console.log(`选择股票: ${code} ${name}`);
+    
+    // 保存状态
+    saveAppState();
     
     // 获取股票基础信息
     try {
