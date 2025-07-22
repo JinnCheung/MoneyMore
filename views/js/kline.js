@@ -973,8 +973,15 @@ function calculateDividendYieldData(dates, stockData) {
         
         // 使用不复权数据的收盘价计算股息率
         let close;
-        if (rawStockDataNoAdj && rawStockDataNoAdj.length > index && rawStockDataNoAdj[index]) {
-            close = parseFloat(rawStockDataNoAdj[index].close); // 使用不复权收盘价
+        if (rawStockDataNoAdj && rawStockDataNoAdj.length > 0) {
+            // 根据交易日期查找对应的不复权数据
+            const tradeDateStr = currentData.trade_date.toString();
+            const noAdjData = rawStockDataNoAdj.find(d => d.trade_date.toString() === tradeDateStr);
+            if (noAdjData) {
+                close = parseFloat(noAdjData.close); // 使用不复权收盘价
+            } else {
+                close = parseFloat(currentData.close); // 如果找不到对应的不复权数据，回退到当前数据
+            }
         } else {
             close = parseFloat(currentData.close); // 如果没有不复权数据，回退到当前数据
         }
