@@ -160,13 +160,13 @@ function restoreUIState(state) {
     }
     
     // 恢复股票输入框显示
-    const stockInput = document.getElementById('stockInput');
-    if (stockInput && currentStock) {
+    const stockSearch = document.getElementById('stockSearch');
+    if (stockSearch && currentStock) {
         const stockName = getStockName(currentStock);
         if (stockName) {
-            stockInput.value = `${stockName} (${currentStock})`;
+            stockSearch.value = `${stockName} (${currentStock})`;
         } else {
-            stockInput.value = currentStock;
+            stockSearch.value = currentStock;
         }
     }
 }
