@@ -77,6 +77,8 @@ let stockList = [];
 let selectedStockIndex = -1;
 let earningsData = null;
 let dividendData = null; // 存储分红数据
+let finaIndicatorData = null; // 存储财务指标数据
+let disclosureDateData = null; // 存储披露日期数据
 let tradingCalendar = null;
 let showEarnings = false;
 let showDividendYield = false; // 控制股息率曲线显示
@@ -499,11 +501,13 @@ async function loadKlineData() {
             url += `&adj=${adj}`;
         }
         
-        // 并行获取K线、财报和分红数据
-        const [stockResponse, earningsResponse, dividendResponse] = await Promise.all([
+        // 并行获取K线、财报、分红、财务指标和披露日期数据
+        const [stockResponse, earningsResponse, dividendResponse, finaIndicatorResponse, disclosureDateResponse] = await Promise.all([
             fetch(url),
             fetch(`${CONFIG.API_BASE_URL}/earnings?ts_code=${currentStock}`),
-            fetch(`${CONFIG.API_BASE_URL}/dividend?ts_code=${currentStock}`)
+            fetch(`${CONFIG.API_BASE_URL}/dividend?ts_code=${currentStock}`),
+            fetch(`${CONFIG.API_BASE_URL}/fina_indicator?ts_code=${currentStock}`),
+            fetch(`${CONFIG.API_BASE_URL}/disclosure_date?ts_code=${currentStock}`)
         ]);
 
         // 处理K线数据
@@ -541,6 +545,34 @@ async function loadKlineData() {
         } else {
             console.warn('加载分红数据失败:', dividendResponse.statusText);
             dividendData = []; // API请求失败
+        }
+
+        // 处理财务指标数据
+        if (finaIndicatorResponse.ok) {
+            const finaIndicatorResult = await finaIndicatorResponse.json();
+            if (finaIndicatorResult.success && finaIndicatorResult.data) {
+                finaIndicatorData = finaIndicatorResult.data;
+                console.log(`✅ 加载了 ${finaIndicatorData.length} 条财务指标数据`);
+            } else {
+                finaIndicatorData = []; // API成功但无数据
+            }
+        } else {
+            console.warn('加载财务指标数据失败:', finaIndicatorResponse.statusText);
+            finaIndicatorData = []; // API请求失败
+        }
+
+        // 处理披露日期数据
+        if (disclosureDateResponse.ok) {
+            const disclosureDateResult = await disclosureDateResponse.json();
+            if (disclosureDateResult.success && disclosureDateResult.data) {
+                disclosureDateData = disclosureDateResult.data;
+                console.log(`✅ 加载了 ${disclosureDateData.length} 条披露日期数据`);
+            } else {
+                disclosureDateData = []; // API成功但无数据
+            }
+        } else {
+            console.warn('加载披露日期数据失败:', disclosureDateResponse.statusText);
+            disclosureDateData = []; // API请求失败
         }
 
         // 格式化数据并渲染图表
@@ -1138,7 +1170,112 @@ function renderChart(dates, klineData, stockInfo) {
                                     tooltip.push(`静态股息率: ${dividendYield}%`);
                                 }
                                 
-                                tooltip.push(`<span style="font-size: 11px; color: #888;">基于${disclosureDate.getFullYear()}年${disclosureDate.getMonth()+1}月${disclosureDate.getDate()}日披露</span>`);
+                                tooltip.push(`<span style="color: #9E9E9E; font-size: 12px;">基于${disclosureDate.getFullYear()}年${disclosureDate.getMonth()+1}月${disclosureDate.getDate()}日披露</span>`);
+                            }
+                        }
+                    }
+                }
+                
+                // 显示扣非同比增长率（基于季报披露日）
+                if (finaIndicatorData && finaIndicatorData.length > 0 && earningsData && earningsData.length > 0) {
+                    const currentDate = new Date(data.name);
+                    
+                    // 找到当前日期之前最近的季报披露日
+                    const sortedEarnings = earningsData
+                        .filter(e => {
+                            const disclosureDate = new Date(e.display_date ? 
+                                `${e.display_date.toString().slice(0,4)}-${e.display_date.toString().slice(4,6)}-${e.display_date.toString().slice(6,8)}` :
+                                `${e.ann_date.toString().slice(0,4)}-${e.ann_date.toString().slice(4,6)}-${e.ann_date.toString().slice(6,8)}`);
+                            return disclosureDate <= currentDate;
+                        })
+                        .sort((a, b) => {
+                            const dateA = a.display_date || a.ann_date;
+                            const dateB = b.display_date || b.ann_date;
+                            return dateB - dateA; // 降序排列，最近的在前
+                        });
+                    
+                    if (sortedEarnings.length > 0) {
+                        const latestEarning = sortedEarnings[0];
+                        const disclosureDate = new Date(latestEarning.display_date ? 
+                            `${latestEarning.display_date.toString().slice(0,4)}-${latestEarning.display_date.toString().slice(4,6)}-${latestEarning.display_date.toString().slice(6,8)}` :
+                            `${latestEarning.ann_date.toString().slice(0,4)}-${latestEarning.ann_date.toString().slice(4,6)}-${latestEarning.ann_date.toString().slice(6,8)}`);
+                        
+                        // 基于季报披露日计算应显示的财务指标期间
+                        // 季报披露日当日显示前一期数据，季报披露日的下一个交易日开始才显示当期数据
+                        const reportEndDate = latestEarning.end_date.toString();
+                        
+                        // 判断当前日期是否为季报披露日当日
+                        const isDisclosureDay = currentDate.toDateString() === disclosureDate.toDateString();
+                        
+                        // 如果是季报披露日当日，显示前一期数据；否则显示当期数据
+                        let targetEndDate;
+                        if (isDisclosureDay) {
+                            // 显示前一期数据
+                            const year = parseInt(reportEndDate.slice(0, 4));
+                            const monthDay = reportEndDate.slice(4, 8);
+                            switch (monthDay) {
+                                case '0331': // 一季报披露日显示上年年报数据
+                                    targetEndDate = `${year - 1}1231`;
+                                    break;
+                                case '0630': // 中报披露日显示当年一季报数据
+                                    targetEndDate = `${year}0331`;
+                                    break;
+                                case '0930': // 三季报披露日显示当年中报数据
+                                    targetEndDate = `${year}0630`;
+                                    break;
+                                case '1231': // 年报披露日显示当年三季报数据
+                                    targetEndDate = `${year}0930`;
+                                    break;
+                                default:
+                                    targetEndDate = reportEndDate;
+                            }
+                        } else {
+                            // 显示当期数据
+                            targetEndDate = reportEndDate;
+                        }
+                        
+                        // 查找对应期间的财务指标数据
+                        const finaIndicator = finaIndicatorData.find(f => {
+                            return f.end_date && f.end_date.toString() === targetEndDate;
+                        });
+                        
+                        if (finaIndicator && finaIndicator.dt_netprofit_yoy !== null && finaIndicator.dt_netprofit_yoy !== undefined) {
+                            // 根据end_date判断财报类型
+                            let reportType = '财报';
+                            const monthDay = targetEndDate.slice(4, 8);
+                            switch (monthDay) {
+                                case '0331':
+                                    reportType = '一季报';
+                                    break;
+                                case '0630':
+                                    reportType = '中报';
+                                    break;
+                                case '0930':
+                                    reportType = '三季报';
+                                    break;
+                                case '1231':
+                                    reportType = '年报';
+                                    break;
+                            }
+                            
+                            const year = targetEndDate.slice(0, 4);
+                            const growthRate = parseFloat(finaIndicator.dt_netprofit_yoy).toFixed(2);
+                            const growthColor = parseFloat(finaIndicator.dt_netprofit_yoy) >= 0 ? '#4CAF50' : '#f44336';
+                            
+                            tooltip.push('', `<strong style="color: #2196F3;">📈 扣非同比增长率</strong>`);
+                            tooltip.push(`${year}年${reportType}: <span style="color: ${growthColor};">${growthRate}%</span>`);
+                            
+                            // 查找对应的披露日期
+                            if (disclosureDateData && disclosureDateData.length > 0) {
+                                const disclosureInfo = disclosureDateData.find(d => {
+                                    return d.end_date && d.end_date.toString() === targetEndDate;
+                                });
+                                
+                                if (disclosureInfo && disclosureInfo.actual_date) {
+                                    const disclosureDate = disclosureInfo.actual_date.toString();
+                                    const formattedDate = `${disclosureDate.slice(0, 4)}年${disclosureDate.slice(4, 6)}月${disclosureDate.slice(6, 8)}日`;
+                                    tooltip.push(`<span style="color: #9E9E9E; font-size: 12px;">基于${formattedDate}披露</span>`);
+                                }
                             }
                         }
                     }
