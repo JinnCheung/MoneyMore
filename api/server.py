@@ -150,7 +150,12 @@ def api_info():
 @app.route('/static/<path:filename>')
 def static_files(filename):
     """静态文件服务"""
-    return send_from_directory(app.static_folder, filename)
+    return send_from_directory('../views', filename)
+
+@app.route('/test_api.html')
+def test_api():
+    """API测试页面"""
+    return send_from_directory('..', 'test_api.html')
 
 
 @app.route(f'{API_PREFIX}/stock_data')

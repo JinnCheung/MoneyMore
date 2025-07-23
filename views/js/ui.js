@@ -14,8 +14,20 @@ function initControls() {
     // 获得焦点时清空内容并显示默认列表
     stockSearch.addEventListener('focus', async () => {
         stockSearch.value = ''; // 自动清空输入框内容
-        const stocks = await searchStocks('');
-        showStockOptions(stocks.slice(0, 10));
+        // 显示默认的热门股票列表
+        if (stockList && stockList.length > 0) {
+            const defaultStocks = stockList.slice(0, 10).map(stock => ({
+                code: stock.ts_code,
+                name: stock.name,
+                industry: stock.industry,
+                area: stock.area
+            }));
+            showStockOptions(defaultStocks);
+        } else {
+            // 如果stockList还没加载，尝试搜索一些热门股票
+            const stocks = await searchStocks('00');
+            showStockOptions(stocks.slice(0, 10));
+        }
     });
     
     // 点击外部关闭下拉框
@@ -136,8 +148,15 @@ function updateStartYearOptions(listDate) {
     const startYearSelect = document.getElementById('startYearSelect');
     const currentYear = new Date().getFullYear();
     
+    // 保存当前选中的值
+    const currentValue = startYearSelect.value;
+    
+    // 临时移除事件监听器，防止在更新选项时触发change事件
+    const changeHandler = startYearSelect.onchange;
+    startYearSelect.onchange = null;
+    
     // 清空现有选项
-    startYearSelect.innerHTML = '<option value="auto" selected>自动</option>';
+    startYearSelect.innerHTML = '<option value="auto">自动</option>';
     
     if (listDate) {
         // 解析上市日期 (格式: YYYYMMDD)
@@ -151,6 +170,16 @@ function updateStartYearOptions(listDate) {
             startYearSelect.appendChild(option);
         }
     }
+    
+    // 恢复之前选中的值，如果该值仍然存在的话
+    if (currentValue && [...startYearSelect.options].some(option => option.value === currentValue)) {
+        startYearSelect.value = currentValue;
+    } else {
+        startYearSelect.value = 'auto';
+    }
+    
+    // 恢复事件监听器
+    startYearSelect.onchange = changeHandler;
 }
 
 // 处理股票搜索

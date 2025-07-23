@@ -492,7 +492,12 @@ function renderChart(dates, klineData, stockInfo) {
                 if (buySignals.length > 0) {
                     const buyData = buySignals.map(signal => {
                         const dateIndex = dates.indexOf(signal.date);
-                        return dateIndex >= 0 ? [dateIndex, signal.price] : null;
+                        if (dateIndex >= 0 && dateIndex < klineData.length) {
+                            // 使用当日收盘价作为买入点位置
+                            const dayClose = klineData[dateIndex][1]; // K线数据格式：[开盘, 收盘, 最低, 最高]
+                            return [dateIndex, dayClose];
+                        }
+                        return null;
                     }).filter(item => item !== null);
                     
                     if (buyData.length > 0) {
@@ -502,23 +507,23 @@ function renderChart(dates, klineData, stockInfo) {
                             yAxisIndex: 0,
                             data: buyData,
                             symbol: 'circle',
-                            symbolSize: 12,
+                            symbolSize: 8,
                             itemStyle: {
-                                color: '#ff4444',
-                                borderColor: '#ff4444',
+                                color: '#3498db',
+                                borderColor: '#3498db',
                                 borderWidth: 2
                             },
                             emphasis: {
                                 itemStyle: {
                                     shadowBlur: 10,
-                                    shadowColor: '#ff4444'
+                                    shadowColor: '#3498db'
                                 }
                             },
                             tooltip: {
                                 formatter: function(params) {
                                     const signal = buySignals[params.dataIndex];
                                     return `<div style="text-align: left;">
-                                        <strong style="color: #ff4444;">🔴 买入信号</strong><br/>
+                                        <strong style="color: #3498db;">🔴 买入信号</strong><br/>
                                         日期: ${signal.date}<br/>
                                         价格: ${signal.price.toFixed(2)}元<br/>
                                         股息率: ${signal.dividendYield.toFixed(2)}%<br/>
@@ -535,7 +540,12 @@ function renderChart(dates, klineData, stockInfo) {
                 if (sellSignals.length > 0) {
                     const sellData = sellSignals.map(signal => {
                         const dateIndex = dates.indexOf(signal.date);
-                        return dateIndex >= 0 ? [dateIndex, signal.price] : null;
+                        if (dateIndex >= 0 && dateIndex < klineData.length) {
+                            // 使用当日收盘价作为卖出点位置
+                            const dayClose = klineData[dateIndex][1]; // K线数据格式：[开盘, 收盘, 最低, 最高]
+                            return [dateIndex, dayClose];
+                        }
+                        return null;
                     }).filter(item => item !== null);
                     
                     if (sellData.length > 0) {
@@ -545,23 +555,23 @@ function renderChart(dates, klineData, stockInfo) {
                             yAxisIndex: 0,
                             data: sellData,
                             symbol: 'circle',
-                            symbolSize: 12,
+                            symbolSize: 8,
                             itemStyle: {
                                 color: 'transparent',
-                                borderColor: '#22c55e',
-                                borderWidth: 3
+                                borderColor: '#3498db',
+                                borderWidth: 2
                             },
                             emphasis: {
                                 itemStyle: {
                                     shadowBlur: 10,
-                                    shadowColor: '#22c55e'
+                                    shadowColor: '#3498db'
                                 }
                             },
                             tooltip: {
                                 formatter: function(params) {
                                     const signal = sellSignals[params.dataIndex];
                                     return `<div style="text-align: left;">
-                                        <strong style="color: #22c55e;">🟢 卖出信号</strong><br/>
+                                        <strong style="color: #3498db;">🟢 卖出信号</strong><br/>
                                         日期: ${signal.date}<br/>
                                         价格: ${signal.price.toFixed(2)}元<br/>
                                         股息率: ${signal.dividendYield.toFixed(2)}%<br/>

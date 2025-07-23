@@ -70,13 +70,18 @@ async function searchStocks(query) {
     }
     
     try {
-        const response = await fetch(`${CONFIG.API_BASE_URL}/stock_basic?search=${encodeURIComponent(query)}`);
+        const response = await fetch(`${CONFIG.API_BASE_URL}/search_stocks?q=${encodeURIComponent(query)}&limit=10`);
         if (!response.ok) {
             throw new Error(`搜索请求失败: HTTP ${response.status}`);
         }
         const result = await response.json();
         if (result.success && result.data) {
-            return result.data.slice(0, 10); // 限制返回10个结果
+            return result.data.map(stock => ({
+                code: stock.code,
+                name: stock.name,
+                industry: stock.industry,
+                area: stock.area
+            }));
         }
         return [];
     } catch (error) {

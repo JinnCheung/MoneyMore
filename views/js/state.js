@@ -65,37 +65,31 @@ function loadAppState() {
 
 // 恢复UI状态
 function restoreUIState(state) {
+    // 恢复下拉选择
+    const periodSelect = document.getElementById('periodSelect');
+    if (periodSelect) {
+        periodSelect.value = (state && state.periodSelect) ? state.periodSelect : '1Y';
+    }
+    
+    const adjSelect = document.getElementById('adjSelect');
+    if (adjSelect) {
+        adjSelect.value = (state && state.adjSelect !== undefined) ? state.adjSelect : '';
+    }
+    
+    const startYearSelect = document.getElementById('startYearSelect');
+    if (startYearSelect) {
+        startYearSelect.value = (state && state.startYearSelect) ? state.startYearSelect : 'auto';
+    }
+    
     if (!state) return;
     
-    // 恢复下拉选择
-    if (state.periodSelect) {
-        const periodSelect = document.getElementById('periodSelect');
-        if (periodSelect) {
-            periodSelect.value = state.periodSelect;
-        }
-    }
-    
-    if (state.adjSelect) {
-        const adjSelect = document.getElementById('adjSelect');
-        if (adjSelect) {
-            adjSelect.value = state.adjSelect;
-        }
-    }
-    
-    if (state.startYearSelect) {
-        const startYearSelect = document.getElementById('startYearSelect');
-        if (startYearSelect) {
-            startYearSelect.value = state.startYearSelect;
-        }
-    }
-    
     // 恢复复选框状态
-    const earningsCheckbox = document.getElementById('showEarnings');
+    const earningsCheckbox = document.getElementById('earningsToggle');
     if (earningsCheckbox) {
         earningsCheckbox.checked = showEarnings;
     }
     
-    const dividendYieldCheckbox = document.getElementById('showDividendYield');
+    const dividendYieldCheckbox = document.getElementById('dividendYieldToggle');
     if (dividendYieldCheckbox) {
         dividendYieldCheckbox.checked = showDividendYield;
     }
@@ -106,9 +100,14 @@ function restoreUIState(state) {
     }
     
     // 恢复股票搜索框
-    const stockInput = document.getElementById('stockInput');
-    if (stockInput && currentStockInfo) {
-        stockInput.value = `${currentStockInfo.name} (${currentStockInfo.ts_code})`;
+    const stockSearch = document.getElementById('stockSearch');
+    if (stockSearch && currentStock) {
+        const stockName = getStockName(currentStock);
+        if (stockName !== currentStock) {
+            stockSearch.value = `${stockName} (${currentStock})`;
+        } else {
+            stockSearch.value = currentStock;
+        }
     }
 }
 
