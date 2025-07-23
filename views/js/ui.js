@@ -67,6 +67,18 @@ function initControls() {
             loadKlineData();
         }
     });
+    
+    // 四进三出买卖点开关
+    const tradingSignalsToggle = document.getElementById('tradingSignalsToggle');
+    tradingSignalsToggle.addEventListener('change', (e) => {
+        showTradingSignals = e.target.checked;
+        saveAppState();
+        
+        if (chart) {
+            // 重新渲染图表以应用开关状态
+            loadKlineData();
+        }
+    });
 }
 
 // 初始化主题切换

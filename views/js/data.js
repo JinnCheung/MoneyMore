@@ -525,11 +525,217 @@ async function loadTradingCalendar() {
     }
 }
 
+// 计算四进三出买卖点
+function calculateTradingSignals(dates, stockData) {
+    const buySignals = [];
+    const sellSignals = [];
+    
+    if (!dates || !stockData || !earningsData || !dividendData || !finaIndicatorData || !rawStockDataNoAdj) {
+        return { buySignals, sellSignals };
+    }
+    
+    let isHolding = false; // 当前是否持有股票
+    let lastBuyIndex = -1; // 最后一次买入的索引
+    
+    for (let i = 0; i < dates.length; i++) {
+        const currentDate = new Date(dates[i]);
+        const tradeDateStr = dates[i].replace(/-/g, ''); // 转换为YYYYMMDD格式
+        
+        // 获取当前日期的不复权收盘价
+        const noAdjData = rawStockDataNoAdj.find(d => d.trade_date.toString() === tradeDateStr);
+        if (!noAdjData) continue;
+        
+        const currentPrice = parseFloat(noAdjData.close);
+        if (!currentPrice || currentPrice <= 0) continue;
+        
+        // 找到当前日期之前最近的年报披露日（用于分红计算）
+        const sortedAnnualEarnings = earningsData
+            .filter(e => {
+                const endDateStr = e.end_date ? e.end_date.toString() : '';
+                if (!endDateStr.endsWith('1231')) return false;
+                
+                const disclosureDate = new Date(e.display_date ? 
+                    `${e.display_date.toString().slice(0,4)}-${e.display_date.toString().slice(4,6)}-${e.display_date.toString().slice(6,8)}` :
+                    `${e.ann_date.toString().slice(0,4)}-${e.ann_date.toString().slice(4,6)}-${e.ann_date.toString().slice(6,8)}`);
+                return disclosureDate <= currentDate;
+            })
+            .sort((a, b) => {
+                const dateA = a.display_date || a.ann_date;
+                const dateB = b.display_date || b.ann_date;
+                return dateB - dateA;
+            });
+        
+        if (sortedAnnualEarnings.length === 0) continue;
+        
+        const latestAnnualEarning = sortedAnnualEarnings[0];
+        const disclosureDate = new Date(latestAnnualEarning.display_date ? 
+            `${latestAnnualEarning.display_date.toString().slice(0,4)}-${latestAnnualEarning.display_date.toString().slice(4,6)}-${latestAnnualEarning.display_date.toString().slice(6,8)}` :
+            `${latestAnnualEarning.ann_date.toString().slice(0,4)}-${latestAnnualEarning.ann_date.toString().slice(4,6)}-${latestAnnualEarning.ann_date.toString().slice(6,8)}`);
+        
+        const reportYear = parseInt(latestAnnualEarning.end_date.toString().slice(0, 4));
+        const isDisclosureDay = currentDate.toDateString() === disclosureDate.toDateString();
+        const dividendYear = isDisclosureDay ? reportYear - 1 : reportYear;
+        
+        // 计算当前静态股息率
+        const yearDividends = dividendData.filter(d => {
+            if (!d.end_date) return false;
+            const endDateStr = d.end_date.toString();
+            const endYear = parseInt(endDateStr.slice(0, 4));
+            return endYear === dividendYear && d.div_proc === '实施';
+        });
+        
+        const totalDividend = yearDividends.reduce((sum, d) => {
+            return sum + (parseFloat(d.cash_div_tax) || 0);
+        }, 0);
+        
+        const currentDividendYield = totalDividend > 0 ? (totalDividend / currentPrice * 100) : 0;
+        
+        // 计算连续分红年数
+        const consecutiveYears = calculateConsecutiveDividendYears(dividendYear, currentDate, earningsData, dividendData);
+        
+        // 获取最近季报的扣非同比增长率
+        const sortedEarnings = earningsData
+            .filter(e => {
+                const disclosureDate = new Date(e.display_date ? 
+                    `${e.display_date.toString().slice(0,4)}-${e.display_date.toString().slice(4,6)}-${e.display_date.toString().slice(6,8)}` :
+                    `${e.ann_date.toString().slice(0,4)}-${e.ann_date.toString().slice(4,6)}-${e.ann_date.toString().slice(6,8)}`);
+                return disclosureDate <= currentDate;
+            })
+            .sort((a, b) => {
+                const dateA = a.display_date || a.ann_date;
+                const dateB = b.display_date || b.ann_date;
+                return dateB - dateA;
+            });
+        
+        let currentGrowthRate = null;
+        if (sortedEarnings.length > 0) {
+            const latestEarning = sortedEarnings[0];
+            const reportEndDate = latestEarning.end_date.toString();
+            const isEarningsDisclosureDay = currentDate.toDateString() === new Date(latestEarning.display_date ? 
+                `${latestEarning.display_date.toString().slice(0,4)}-${latestEarning.display_date.toString().slice(4,6)}-${latestEarning.display_date.toString().slice(6,8)}` :
+                `${latestEarning.ann_date.toString().slice(0,4)}-${latestEarning.ann_date.toString().slice(4,6)}-${latestEarning.ann_date.toString().slice(6,8)}`).toDateString();
+            
+            let targetEndDate;
+            if (isEarningsDisclosureDay) {
+                const year = parseInt(reportEndDate.slice(0, 4));
+                const monthDay = reportEndDate.slice(4, 8);
+                switch (monthDay) {
+                    case '0331':
+                        targetEndDate = `${year - 1}1231`;
+                        break;
+                    case '0630':
+                        targetEndDate = `${year}0331`;
+                        break;
+                    case '0930':
+                        targetEndDate = `${year}0630`;
+                        break;
+                    case '1231':
+                        targetEndDate = `${year}0930`;
+                        break;
+                    default:
+                        targetEndDate = reportEndDate;
+                }
+            } else {
+                targetEndDate = reportEndDate;
+            }
+            
+            const finaIndicator = finaIndicatorData.find(f => {
+                return f.end_date && f.end_date.toString() === targetEndDate;
+            });
+            
+            if (finaIndicator && finaIndicator.dt_netprofit_yoy !== null && finaIndicator.dt_netprofit_yoy !== undefined) {
+                currentGrowthRate = parseFloat(finaIndicator.dt_netprofit_yoy);
+            }
+        }
+        
+        if (!isHolding) {
+            // 买入条件：连续四年分红 + 扣非增长率≥-10% + 股息率首次达到4%
+            if (consecutiveYears >= 4 && 
+                currentGrowthRate !== null && currentGrowthRate >= -10 && 
+                currentDividendYield >= 4.0) {
+                
+                // 检查是否是首次达到4%（避免重复买入）
+                let isFirstTime = true;
+                if (i > 0) {
+                    // 检查前一个交易日的股息率
+                    const prevTradeDateStr = dates[i-1].replace(/-/g, '');
+                    const prevNoAdjData = rawStockDataNoAdj.find(d => d.trade_date.toString() === prevTradeDateStr);
+                    if (prevNoAdjData) {
+                        const prevPrice = parseFloat(prevNoAdjData.close);
+                        const prevDividendYield = totalDividend > 0 ? (totalDividend / prevPrice * 100) : 0;
+                        if (prevDividendYield >= 4.0) {
+                            isFirstTime = false;
+                        }
+                    }
+                }
+                
+                if (isFirstTime) {
+                    buySignals.push({
+                        date: dates[i],
+                        price: currentPrice,
+                        dividendYield: currentDividendYield,
+                        growthRate: currentGrowthRate,
+                        consecutiveYears: consecutiveYears
+                    });
+                    isHolding = true;
+                    lastBuyIndex = i;
+                }
+            }
+        } else {
+            // 卖出条件：股息率首次达到3% 或 扣非增长率<-10%
+            let shouldSell = false;
+            let sellReason = '';
+            
+            // 条件1：扣非增长率小于-10%
+            if (currentGrowthRate !== null && currentGrowthRate < -10) {
+                shouldSell = true;
+                sellReason = '扣非增长率<-10%';
+            }
+            
+            // 条件2：股息率首次达到3%
+            if (!shouldSell && currentDividendYield <= 3.0) {
+                // 检查是否是首次达到3%
+                let isFirstTime = true;
+                if (i > lastBuyIndex) {
+                    // 检查前一个交易日的股息率
+                    const prevTradeDateStr = dates[i-1].replace(/-/g, '');
+                    const prevNoAdjData = rawStockDataNoAdj.find(d => d.trade_date.toString() === prevTradeDateStr);
+                    if (prevNoAdjData) {
+                        const prevPrice = parseFloat(prevNoAdjData.close);
+                        const prevDividendYield = totalDividend > 0 ? (totalDividend / prevPrice * 100) : 0;
+                        if (prevDividendYield <= 3.0) {
+                            isFirstTime = false;
+                        }
+                    }
+                }
+                
+                if (isFirstTime) {
+                    shouldSell = true;
+                    sellReason = '股息率首次达到3%';
+                }
+            }
+            
+            if (shouldSell) {
+                sellSignals.push({
+                    date: dates[i],
+                    price: currentPrice,
+                    dividendYield: currentDividendYield,
+                    growthRate: currentGrowthRate,
+                    reason: sellReason
+                });
+                isHolding = false;
+            }
+        }
+    }
+    
+    return { buySignals, sellSignals };
+}
+
 // 导出函数
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         loadKlineData, calculateDateRange, formatDate,
         calculateConsecutiveDividendYears, calculateDividendYieldData,
-        formatStockData, loadTradingCalendar
+        formatStockData, loadTradingCalendar, calculateTradingSignals
     };
 }

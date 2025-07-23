@@ -12,6 +12,15 @@ function renderChart(dates, klineData, stockInfo) {
     
     const isDark = document.body.classList.contains('dark-mode');
     
+    // 计算四进三出买卖点
+    let buySignals = [];
+    let sellSignals = [];
+    if (showTradingSignals && typeof calculateTradingSignals === 'function') {
+        const signals = calculateTradingSignals(dates, klineData);
+        buySignals = signals.buySignals;
+        sellSignals = signals.sellSignals;
+    }
+    
     // 处理财报标记数据
     const earningsMarks = [];
     const earningsLines = [];
@@ -475,6 +484,95 @@ function renderChart(dates, klineData, stockInfo) {
                     smooth: true,
                     connectNulls: false
                 });
+            }
+            
+            // 添加买卖点标记
+            if (showTradingSignals) {
+                // 买入点（实心圆）
+                if (buySignals.length > 0) {
+                    const buyData = buySignals.map(signal => {
+                        const dateIndex = dates.indexOf(signal.date);
+                        return dateIndex >= 0 ? [dateIndex, signal.price] : null;
+                    }).filter(item => item !== null);
+                    
+                    if (buyData.length > 0) {
+                        seriesArray.push({
+                            name: '买入点',
+                            type: 'scatter',
+                            yAxisIndex: 0,
+                            data: buyData,
+                            symbol: 'circle',
+                            symbolSize: 12,
+                            itemStyle: {
+                                color: '#ff4444',
+                                borderColor: '#ff4444',
+                                borderWidth: 2
+                            },
+                            emphasis: {
+                                itemStyle: {
+                                    shadowBlur: 10,
+                                    shadowColor: '#ff4444'
+                                }
+                            },
+                            tooltip: {
+                                formatter: function(params) {
+                                    const signal = buySignals[params.dataIndex];
+                                    return `<div style="text-align: left;">
+                                        <strong style="color: #ff4444;">🔴 买入信号</strong><br/>
+                                        日期: ${signal.date}<br/>
+                                        价格: ${signal.price.toFixed(2)}元<br/>
+                                        股息率: ${signal.dividendYield.toFixed(2)}%<br/>
+                                        扣非增长率: ${signal.growthRate ? signal.growthRate.toFixed(2) + '%' : 'N/A'}<br/>
+                                        连续分红: ${signal.consecutiveYears}年
+                                    </div>`;
+                                }
+                            }
+                        });
+                    }
+                }
+                
+                // 卖出点（空心圆）
+                if (sellSignals.length > 0) {
+                    const sellData = sellSignals.map(signal => {
+                        const dateIndex = dates.indexOf(signal.date);
+                        return dateIndex >= 0 ? [dateIndex, signal.price] : null;
+                    }).filter(item => item !== null);
+                    
+                    if (sellData.length > 0) {
+                        seriesArray.push({
+                            name: '卖出点',
+                            type: 'scatter',
+                            yAxisIndex: 0,
+                            data: sellData,
+                            symbol: 'circle',
+                            symbolSize: 12,
+                            itemStyle: {
+                                color: 'transparent',
+                                borderColor: '#22c55e',
+                                borderWidth: 3
+                            },
+                            emphasis: {
+                                itemStyle: {
+                                    shadowBlur: 10,
+                                    shadowColor: '#22c55e'
+                                }
+                            },
+                            tooltip: {
+                                formatter: function(params) {
+                                    const signal = sellSignals[params.dataIndex];
+                                    return `<div style="text-align: left;">
+                                        <strong style="color: #22c55e;">🟢 卖出信号</strong><br/>
+                                        日期: ${signal.date}<br/>
+                                        价格: ${signal.price.toFixed(2)}元<br/>
+                                        股息率: ${signal.dividendYield.toFixed(2)}%<br/>
+                                        扣非增长率: ${signal.growthRate ? signal.growthRate.toFixed(2) + '%' : 'N/A'}<br/>
+                                        卖出原因: ${signal.reason}
+                                    </div>`;
+                                }
+                            }
+                        });
+                    }
+                }
             }
             
             return seriesArray;

@@ -12,6 +12,7 @@ let disclosureDateData = null; // 存储披露日期数据
 let tradingCalendar = null;
 let showEarnings = false;
 let showDividendYield = false; // 控制股息率曲线显示
+let showTradingSignals = false; // 控制四进三出买卖点显示
 let currentStockInfo = null; // 存储当前股票的基础信息
 let rawStockDataNoAdj = []; // 存储不复权数据，用于计算股息率
 let rawStockData = [];
@@ -23,6 +24,7 @@ function saveAppState() {
         currentStock: currentStock,
         showEarnings: showEarnings,
         showDividendYield: showDividendYield,
+        showTradingSignals: showTradingSignals,
         periodSelect: document.getElementById('periodSelect').value,
         adjSelect: document.getElementById('adjSelect').value,
         startYearSelect: document.getElementById('startYearSelect').value
@@ -48,6 +50,9 @@ function loadAppState() {
             }
             if (typeof state.showDividendYield === 'boolean') {
                 showDividendYield = state.showDividendYield;
+            }
+            if (typeof state.showTradingSignals === 'boolean') {
+                showTradingSignals = state.showTradingSignals;
             }
             
             return state;
@@ -95,6 +100,11 @@ function restoreUIState(state) {
         dividendYieldCheckbox.checked = showDividendYield;
     }
     
+    const tradingSignalsCheckbox = document.getElementById('tradingSignalsToggle');
+    if (tradingSignalsCheckbox) {
+        tradingSignalsCheckbox.checked = showTradingSignals;
+    }
+    
     // 恢复股票搜索框
     const stockInput = document.getElementById('stockInput');
     if (stockInput && currentStockInfo) {
@@ -113,7 +123,7 @@ if (typeof module !== 'undefined' && module.exports) {
         // 变量
         chart, currentStock, stockList, selectedStockIndex,
         earningsData, dividendData, finaIndicatorData, disclosureDateData,
-        tradingCalendar, showEarnings, showDividendYield, currentStockInfo,
+        tradingCalendar, showEarnings, showDividendYield, showTradingSignals, currentStockInfo,
         rawStockDataNoAdj, rawStockData, dividendYieldData,
         // 函数
         saveAppState, loadAppState, restoreUIState, getStockName
