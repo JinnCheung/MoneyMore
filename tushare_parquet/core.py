@@ -46,8 +46,12 @@ def _get_metadata_file_path(key):
     """获取元数据文件的完整路径。"""
     return os.path.join(_metadata_dir, f"{key}.json")
 
-def _is_cache_valid(key, ttl_minutes=1440): # 默认 TTL: 24 小时
+def _is_cache_valid(key, ttl_minutes=1440, force_refresh=False): # 默认 TTL: 24 小时
     """检查给定键的缓存是否仍然有效。"""
+    # 如果强制刷新，则直接返回False
+    if force_refresh:
+        return False
+    
     metadata_path = _get_metadata_file_path(key)
     if not os.path.exists(metadata_path):
         return False
@@ -61,13 +65,13 @@ def _is_cache_valid(key, ttl_minutes=1440): # 默认 TTL: 24 小时
         
     return True
 
-def _fetch_and_cache(api_name, fetch_callable, ttl_minutes, **kwargs):
+def _fetch_and_cache(api_name, fetch_callable, ttl_minutes, force_refresh=False, **kwargs):
     """从可调用对象获取数据并进行缓存的通用函数。"""
     cache_key = _generate_cache_key(api_name, **kwargs)
     cache_file_path = _get_cache_file_path(cache_key)
     metadata_file_path = _get_metadata_file_path(cache_key)
 
-    if _is_cache_valid(cache_key, ttl_minutes):
+    if _is_cache_valid(cache_key, ttl_minutes, force_refresh):
         try:
             # 从缓存加载
             return pd.read_parquet(cache_file_path)
@@ -86,15 +90,15 @@ def _fetch_and_cache(api_name, fetch_callable, ttl_minutes, **kwargs):
             
     return df
 
-def pro_bar(ttl_minutes=1440, **kwargs):
+def pro_bar(ttl_minutes=1440, force_refresh=False, **kwargs):
     """tushare.pro_bar 的缓存版本。"""
     if 'ts_code' not in kwargs:
         raise ValueError("pro_bar 需要 ts_code 参数")
     
     # pro_bar 是 tushare 包中的一个函数，而不是 pro_api 的方法
-    return _fetch_and_cache('pro_bar', ts.pro_bar, ttl_minutes, **kwargs)
+    return _fetch_and_cache('pro_bar', ts.pro_bar, ttl_minutes, force_refresh, **kwargs)
 
-def dividend(ttl_minutes=1440, **kwargs):
+def dividend(ttl_minutes=1440, force_refresh=False, **kwargs):
     """tushare.pro.dividend 的缓存版本。"""
     pro = _get_pro_api()
     
@@ -102,24 +106,24 @@ def dividend(ttl_minutes=1440, **kwargs):
     if not any(param in kwargs and kwargs[param] is not None for param in required_params):
         raise ValueError(f"以下参数至少需要一个: {', '.join(required_params)}")
 
-    return _fetch_and_cache('dividend', pro.dividend, ttl_minutes, **kwargs)
+    return _fetch_and_cache('dividend', pro.dividend, ttl_minutes, force_refresh, **kwargs)
 
-def income(ttl_minutes=43200, **kwargs):
+def income(ttl_minutes=43200, force_refresh=False, **kwargs):
     """获取带缓存的利润表数据。"""
     pro = _get_pro_api()
-    return _fetch_and_cache('income', pro.income, ttl_minutes, **kwargs)
+    return _fetch_and_cache('income', pro.income, ttl_minutes, force_refresh, **kwargs)
 
-def stock_basic(ttl_minutes=43200, **kwargs):
+def stock_basic(ttl_minutes=43200, force_refresh=False, **kwargs):
     """获取带缓存的基础信息数据。"""
     pro = _get_pro_api()
-    return _fetch_and_cache('stock_basic', pro.stock_basic, ttl_minutes, **kwargs)
+    return _fetch_and_cache('stock_basic', pro.stock_basic, ttl_minutes, force_refresh, **kwargs)
 
-def trade_cal(ttl_minutes=43200, **kwargs):
+def trade_cal(ttl_minutes=43200, force_refresh=False, **kwargs):
     """获取带缓存的交易日历数据。"""
     pro = _get_pro_api()
-    return _fetch_and_cache('trade_cal', pro.trade_cal, ttl_minutes, **kwargs)
+    return _fetch_and_cache('trade_cal', pro.trade_cal, ttl_minutes, force_refresh, **kwargs)
 
-def fina_indicator(ttl_minutes=43200, **kwargs):
+def fina_indicator(ttl_minutes=43200, force_refresh=False, **kwargs):
     """获取带缓存的财务指标数据。
     
     参数:
@@ -129,6 +133,7 @@ def fina_indicator(ttl_minutes=43200, **kwargs):
         end_date (str, 可选): 报告期结束日期
         period (str, 可选): 报告期(每个季度最后一天的日期，如20171231表示年报)
         ttl_minutes (int): 缓存有效期，默认30天(43200分钟)
+        force_refresh (bool): 是否强制刷新缓存，默认False
         
     返回:
         pandas.DataFrame: 财务指标数据
@@ -144,9 +149,9 @@ def fina_indicator(ttl_minutes=43200, **kwargs):
     if 'ts_code' not in kwargs:
         raise ValueError("fina_indicator 需要 ts_code 参数")
     
-    return _fetch_and_cache('fina_indicator', pro.fina_indicator, ttl_minutes, **kwargs)
+    return _fetch_and_cache('fina_indicator', pro.fina_indicator, ttl_minutes, force_refresh, **kwargs)
 
-def disclosure_date(ttl_minutes=43200, **kwargs):
+def disclosure_date(ttl_minutes=43200, force_refresh=False, **kwargs):
     """获取带缓存的财报披露计划日期数据。
     
     参数:
@@ -155,6 +160,7 @@ def disclosure_date(ttl_minutes=43200, **kwargs):
         pre_date (str, 可选): 计划披露日期
         actual_date (str, 可选): 实际披露日期
         ttl_minutes (int): 缓存有效期，默认30天(43200分钟)
+        force_refresh (bool): 是否强制刷新缓存，默认False
         
     返回:
         pandas.DataFrame: 财报披露计划数据，包含以下字段：
@@ -182,4 +188,4 @@ def disclosure_date(ttl_minutes=43200, **kwargs):
     """
     pro = _get_pro_api()
     
-    return _fetch_and_cache('disclosure_date', pro.disclosure_date, ttl_minutes, **kwargs)
+    return _fetch_and_cache('disclosure_date', pro.disclosure_date, ttl_minutes, force_refresh, **kwargs)

@@ -102,12 +102,12 @@ body.dark-mode .loading {
     color: #b0b0b0;
 }
 
-body.dark-mode #updateBtn {
+body.dark-mode #updateBtn, body.dark-mode .refresh-btn {
     background: #3498db;
     color: white;
 }
 
-body.dark-mode #updateBtn:hover {
+body.dark-mode #updateBtn:hover, body.dark-mode .refresh-btn:hover {
     background: #2980b9;
 }
 
@@ -259,7 +259,7 @@ body.dark-mode #updateBtn:hover {
     margin-left: 6px;
 }
 
-#updateBtn {
+#updateBtn, .refresh-btn {
     padding: 6px 12px;
     background: #3498db;
     color: white;
@@ -270,11 +270,11 @@ body.dark-mode #updateBtn:hover {
     transition: background 0.3s;
 }
 
-#updateBtn:hover {
+#updateBtn:hover, .refresh-btn:hover {
     background: #2980b9;
 }
 
-#updateBtn:disabled {
+#updateBtn:disabled, .refresh-btn:disabled {
     background: #bdc3c7;
     cursor: not-allowed;
 }
@@ -343,6 +343,34 @@ body.dark-mode .theme-toggle {
 }
 
 body.dark-mode .theme-toggle:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* 强制刷新按钮 */
+.refresh-toggle {
+    background: none;
+    color: #666;
+    border: none;
+    width: auto;
+    height: auto;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 4px;
+    border-radius: 4px;
+}
+
+.refresh-toggle:hover {
+    color: #333;
+    background: rgba(0, 0, 0, 0.05);
+}
+
+body.dark-mode .refresh-toggle {
+    color: #ccc;
+}
+
+body.dark-mode .refresh-toggle:hover {
     color: #fff;
     background: rgba(255, 255, 255, 0.1);
 }

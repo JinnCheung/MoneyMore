@@ -130,17 +130,56 @@ function updateChartTheme() {
 }
 
 // 更新时间显示
-function updateTimeDisplay() {
-    const now = new Date();
-    const timeStr = now.toLocaleString('zh-CN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    });
-    document.getElementById('updateTime').textContent = timeStr;
+async function updateTimeDisplay(stockCode = null) {
+    try {
+        console.log('⏰ 正在获取缓存时间信息...');
+        
+        let url = `${CONFIG.API_BASE_URL}/cache_info`;
+        
+        // 如果提供了股票代码，则查询该股票的缓存信息
+        if (stockCode) {
+            const params = new URLSearchParams({ ts_code: stockCode });
+            
+            // 添加其他相关参数
+            const period = document.getElementById('periodSelect').value || '1Y';
+            const startYear = document.getElementById('startYearSelect').value || 'auto';
+            const adj = document.getElementById('adjSelect').value;
+            const freq = 'D'; // pro_bar固定使用日频数据
+            
+            // 计算日期范围（使用与loadKlineData相同的逻辑）
+            const { startDate, endDate } = calculateDateRange(period, startYear);
+            const startDateStr = formatDate(startDate);
+            const endDateStr = formatDate(endDate);
+            
+            if (startDateStr) params.append('start_date', startDateStr);
+            if (endDateStr) params.append('end_date', endDateStr);
+            if (adj && adj !== 'None') params.append('adj', adj);
+            if (freq) params.append('freq', freq);
+            
+            url += '?' + params.toString();
+            console.log('⏰ 查询股票缓存信息:', stockCode);
+        } else {
+            console.log('⏰ 查询股票基础信息缓存');
+        }
+        
+        const response = await fetch(url);
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success && result.data) {
+                console.log('⏰ 缓存时间获取成功:', result.data.cache_time, '类型:', result.data.cache_type);
+                document.getElementById('updateTime').textContent = result.data.cache_time;
+            } else {
+                console.warn('⏰ 缓存时间API返回失败:', result);
+                document.getElementById('updateTime').textContent = '获取失败';
+            }
+        } else {
+            console.warn('⏰ 缓存时间API请求失败:', response.status, response.statusText);
+            document.getElementById('updateTime').textContent = '获取失败';
+        }
+    } catch (error) {
+        console.warn('⏰ 获取缓存时间失败:', error);
+        document.getElementById('updateTime').textContent = '获取失败';
+    }
 }
 
 // 更新起始年份选择器

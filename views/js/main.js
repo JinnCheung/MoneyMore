@@ -45,16 +45,29 @@ async function initPage() {
     // 初始化图表
     initChart();
     
-    // 开始时间显示更新
-    updateTimeDisplay();
-    setInterval(updateTimeDisplay, 1000);
+    // 初始化时间显示
+    updateTimeDisplay(currentStock);
     
     // 加载交易日历
     loadTradingCalendar();
     
     // 如果有当前股票，加载其数据
     if (currentStock) {
-        loadKlineData(currentStock);
+        loadKlineData(false); // 页面初始化时不强制刷新
+    }
+    
+    // 添加强制刷新按钮事件监听器
+    const refreshBtn = document.getElementById('refreshToggle');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => {
+            console.log('🔄 强制刷新按钮被点击');
+            if (currentStock) {
+                console.log(`🔄 开始强制刷新股票数据: ${currentStock}`);
+                loadKlineData(true); // 强制刷新数据
+            } else {
+                console.warn('🔄 无法强制刷新：未选择股票');
+            }
+        });
     }
 }
 

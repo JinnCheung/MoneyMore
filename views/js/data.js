@@ -1,9 +1,13 @@
 // MoneyMore 数据处理模块
 
 // 加载K线数据
-async function loadKlineData() {
+async function loadKlineData(forceRefresh = false) {
     try {
         showLoading();
+        
+        if (forceRefresh) {
+            console.log('🔄 执行强制刷新模式，将清除缓存并重新获取数据');
+        }
         
         // 获取时间跨度
         const period = document.getElementById('periodSelect').value || '1Y';
@@ -17,25 +21,32 @@ async function loadKlineData() {
         const startDateStr = formatDate(startDate);
         const endDateStr = formatDate(endDate);
         
-        console.log(`获取股票数据: ${currentStock}, ${startDateStr} 至 ${endDateStr}, 复权: ${adj || '不复权'}`);
+        console.log(`获取股票数据: ${currentStock}, ${startDateStr} 至 ${endDateStr}, 复权: ${adj || '不复权'}${forceRefresh ? ' [强制刷新]' : ''}`);
         
         // 构建API请求URL
         let url = `${CONFIG.API_BASE_URL}/stock_data?ts_code=${currentStock}&start_date=${startDateStr}&end_date=${endDateStr}`;
         if (adj) {
             url += `&adj=${adj}`;
         }
+        if (forceRefresh) {
+            url += `&force_refresh=true`;
+            console.log('🔄 API请求包含force_refresh参数');
+        }
         
         // 构建不复权数据请求URL（用于计算股息率）
-        const noAdjUrl = `${CONFIG.API_BASE_URL}/stock_data?ts_code=${currentStock}&start_date=${startDateStr}&end_date=${endDateStr}`;
+        let noAdjUrl = `${CONFIG.API_BASE_URL}/stock_data?ts_code=${currentStock}&start_date=${startDateStr}&end_date=${endDateStr}`;
+        if (forceRefresh) {
+            noAdjUrl += `&force_refresh=true`;
+        }
         
         // 并行获取K线、不复权K线、财报、分红、财务指标和披露日期数据
         const [stockResponse, noAdjStockResponse, earningsResponse, dividendResponse, finaIndicatorResponse, disclosureDateResponse] = await Promise.all([
             fetch(url),
             fetch(noAdjUrl),
-            fetch(`${CONFIG.API_BASE_URL}/earnings?ts_code=${currentStock}`),
-            fetch(`${CONFIG.API_BASE_URL}/dividend?ts_code=${currentStock}`),
-            fetch(`${CONFIG.API_BASE_URL}/fina_indicator?ts_code=${currentStock}`),
-            fetch(`${CONFIG.API_BASE_URL}/disclosure_date?ts_code=${currentStock}`)
+            fetch(`${CONFIG.API_BASE_URL}/earnings?ts_code=${currentStock}${forceRefresh ? '&force_refresh=true' : ''}`),
+            fetch(`${CONFIG.API_BASE_URL}/dividend?ts_code=${currentStock}${forceRefresh ? '&force_refresh=true' : ''}`),
+            fetch(`${CONFIG.API_BASE_URL}/fina_indicator?ts_code=${currentStock}${forceRefresh ? '&force_refresh=true' : ''}`),
+            fetch(`${CONFIG.API_BASE_URL}/disclosure_date?ts_code=${currentStock}${forceRefresh ? '&force_refresh=true' : ''}`)
         ]);
 
         // 处理K线数据
@@ -123,7 +134,7 @@ async function loadKlineData() {
         window.currentChartData = { dates, klineData, stockInfo };
 
         showStats(stockInfo);
-        updateTimeDisplay();
+        updateTimeDisplay(currentStock);
         renderChart(dates, klineData, stockInfo, dividendYieldData);
 
         // 根据起始年份和时间跨度动态设置dataZoom
@@ -198,10 +209,19 @@ async function loadKlineData() {
             });
         }
         
-        console.log(`✅ 成功加载 ${stockResult.data.length} 条数据`);
+        console.log(`✅ 成功加载 ${stockResult.data.length} 条数据${forceRefresh ? ' [强制刷新完成]' : ''}`);
+        
+        // 更新缓存时间显示
+        if (forceRefresh) {
+            console.log('🔄 强制刷新完成，正在更新缓存时间显示...');
+        }
+        updateTimeDisplay(currentStock);
         
     } catch (error) {
         console.error('加载K线数据失败:', error);
+        if (forceRefresh) {
+            console.error('🔄 强制刷新失败:', error.message);
+        }
         showError('加载数据失败: ' + error.message);
     }
 }

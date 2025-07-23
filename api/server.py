@@ -193,9 +193,10 @@ def get_stock_data():
     params = {k: v for k, v in params.items() if v is not None}
     
     ttl_minutes = int(request.args.get('ttl_minutes', 1440))
+    force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
     
     # 调用 tushare_parquet 接口
-    df = tsp.pro_bar(ttl_minutes=ttl_minutes, **params)
+    df = tsp.pro_bar(ttl_minutes=ttl_minutes, force_refresh=force_refresh, **params)
     
     if df is None or df.empty:
         return jsonify({
@@ -235,9 +236,10 @@ def get_dividend():
     params = {k: v for k, v in params.items() if v is not None}
     
     ttl_minutes = int(request.args.get('ttl_minutes', 1440))
+    force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
     
     # 调用 tushare_parquet 接口
-    df = tsp.dividend(ttl_minutes=ttl_minutes, **params)
+    df = tsp.dividend(ttl_minutes=ttl_minutes, force_refresh=force_refresh, **params)
     
     if df is None or df.empty:
         return jsonify({
@@ -281,9 +283,10 @@ def get_income():
     params = {k: v for k, v in params.items() if v is not None}
     
     ttl_minutes = int(request.args.get('ttl_minutes', 43200))
+    force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
     
     # 调用 tushare_parquet 接口
-    df = tsp.income(ttl_minutes=ttl_minutes, **params)
+    df = tsp.income(ttl_minutes=ttl_minutes, force_refresh=force_refresh, **params)
     
     if df is None or df.empty:
         return jsonify({
@@ -321,9 +324,10 @@ def get_stock_basic():
     params = {k: v for k, v in params.items() if v is not None}
     
     ttl_minutes = int(request.args.get('ttl_minutes', 43200))
+    force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
     
     # 调用 tushare_parquet 接口
-    df = tsp.stock_basic(ttl_minutes=ttl_minutes, **params)
+    df = tsp.stock_basic(ttl_minutes=ttl_minutes, force_refresh=force_refresh, **params)
     
     if df is None or df.empty:
         return jsonify({
@@ -361,9 +365,10 @@ def get_trade_cal():
     params = {k: v for k, v in params.items() if v is not None}
     
     ttl_minutes = int(request.args.get('ttl_minutes', 43200))
+    force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
     
     # 调用 tushare_parquet 接口
-    df = tsp.trade_cal(ttl_minutes=ttl_minutes, **params)
+    df = tsp.trade_cal(ttl_minutes=ttl_minutes, force_refresh=force_refresh, **params)
     
     if df is None or df.empty:
         return jsonify({
@@ -411,9 +416,10 @@ def get_fina_indicator():
     params = {k: v for k, v in params.items() if v is not None}
     
     ttl_minutes = int(request.args.get('ttl_minutes', 43200))
+    force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
     
     # 调用 tushare_parquet 接口
-    df = tsp.fina_indicator(ttl_minutes=ttl_minutes, **params)
+    df = tsp.fina_indicator(ttl_minutes=ttl_minutes, force_refresh=force_refresh, **params)
     
     if df is None or df.empty:
         return jsonify({
@@ -451,9 +457,10 @@ def get_disclosure_date():
     params = {k: v for k, v in params.items() if v is not None}
     
     ttl_minutes = int(request.args.get('ttl_minutes', 43200))
+    force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
     
     # 调用 tushare_parquet 接口
-    df = tsp.disclosure_date(ttl_minutes=ttl_minutes, **params)
+    df = tsp.disclosure_date(ttl_minutes=ttl_minutes, force_refresh=force_refresh, **params)
     
     if df is None or df.empty:
         return jsonify({
@@ -486,10 +493,11 @@ def get_earnings():
         }), 400
     
     ttl_minutes = int(request.args.get('ttl_minutes', 43200))
+    force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
     
     try:
         # 获取财报披露计划数据
-        disclosure_data = tsp.disclosure_date(ts_code=ts_code, ttl_minutes=ttl_minutes)
+        disclosure_data = tsp.disclosure_date(ts_code=ts_code, ttl_minutes=ttl_minutes, force_refresh=force_refresh)
         
         if disclosure_data is None or disclosure_data.empty:
             return jsonify({
@@ -511,7 +519,7 @@ def get_earnings():
             })
         
         # 获取交易日历数据
-        trade_cal = tsp.trade_cal(ttl_minutes=ttl_minutes)
+        trade_cal = tsp.trade_cal(ttl_minutes=ttl_minutes, force_refresh=force_refresh)
         trading_days = set(trade_cal[trade_cal['is_open'] == 1]['cal_date'].astype(str))
         
         # 处理财报数据，调整到最近的交易日
@@ -579,9 +587,10 @@ def get_trading_calendar():
     params = {k: v for k, v in params.items() if v is not None}
     
     ttl_minutes = int(request.args.get('ttl_minutes', 43200))
+    force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
     
     try:
-        data = tsp.trade_cal(ttl_minutes=ttl_minutes, **params)
+        data = tsp.trade_cal(ttl_minutes=ttl_minutes, force_refresh=force_refresh, **params)
         
         if data is None or data.empty:
             return jsonify({
@@ -671,8 +680,9 @@ def search_stocks():
     limit = int(request.args.get('limit', 20))
     
     # 获取股票基础信息
+    force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
     try:
-        df = tsp.stock_basic(ttl_minutes=1440)  # 缓存1天
+        df = tsp.stock_basic(ttl_minutes=1440, force_refresh=force_refresh)  # 缓存1天
         
         if df is None or df.empty:
             return jsonify({
@@ -776,6 +786,81 @@ def method_not_allowed(error):
         'error': 'MethodNotAllowed',
         'message': '请求方法不被允许'
     }), 405
+
+
+@app.route(f'{API_PREFIX}/cache_info')
+@handle_api_error
+def get_cache_info():
+    """
+    获取缓存信息
+    
+    参数:
+        ts_code (str, 可选): 股票代码，如果提供则返回该股票的缓存信息，否则返回stock_basic的缓存信息
+        start_date (str, 可选): 开始日期，格式 YYYYMMDD（仅在查询股票数据缓存时使用）
+        end_date (str, 可选): 结束日期，格式 YYYYMMDD（仅在查询股票数据缓存时使用）
+        adj (str, 可选): 复权类型（仅在查询股票数据缓存时使用）
+        freq (str, 可选): 数据频度（仅在查询股票数据缓存时使用）
+    """
+    try:
+        ts_code = request.args.get('ts_code')
+        
+        if ts_code:
+            # 查询股票数据的缓存信息
+            params = {
+                'ts_code': ts_code,
+                'start_date': request.args.get('start_date'),
+                'end_date': request.args.get('end_date'),
+                'adj': request.args.get('adj'),
+                'freq': request.args.get('freq', 'D')
+            }
+            # 移除空值参数
+            params = {k: v for k, v in params.items() if v is not None}
+            
+            cache_key = tsp.core._generate_cache_key('pro_bar', **params)
+            cache_type = f'股票数据 ({ts_code})'
+        else:
+            # 查询 stock_basic 的缓存信息
+            cache_key = tsp.core._generate_cache_key('stock_basic')
+            cache_type = '股票基础信息'
+        
+        metadata_file_path = tsp.core._get_metadata_file_path(cache_key)
+        
+        if os.path.exists(metadata_file_path):
+            with open(metadata_file_path, 'r') as f:
+                metadata = json.load(f)
+            
+            # 解析时间戳
+            cache_time = datetime.fromisoformat(metadata['timestamp'])
+            
+            return jsonify({
+                'success': True,
+                'message': f'{cache_type}缓存信息获取成功',
+                'data': {
+                    'cache_time': cache_time.strftime('%Y-%m-%d %H:%M:%S'),
+                    'cache_timestamp': metadata['timestamp'],
+                    'cache_type': cache_type
+                }
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'message': f'{cache_type}缓存文件不存在',
+                'data': {
+                    'cache_time': '暂无缓存',
+                    'cache_timestamp': None,
+                    'cache_type': cache_type
+                }
+            })
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'获取缓存信息失败: {str(e)}',
+            'data': {
+                'cache_time': '获取失败',
+                'cache_timestamp': None
+            }
+        })
 
 
 # 注意：启动逻辑已移至 app.py
