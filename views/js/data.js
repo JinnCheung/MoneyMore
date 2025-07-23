@@ -213,49 +213,24 @@ function calculateDateRange(period, startYear) {
     
     if (startYear === 'auto' || !startYear) {
         // 自动模式：根据选择的时间跨度设置起始日期，结束日期为当前日期
-        switch (period) {
-            case '1Y':
-                startDate.setFullYear(endDate.getFullYear() - 1);
-                break;
-            case '2Y':
-                startDate.setFullYear(endDate.getFullYear() - 2);
-                break;
-            case '3Y':
-                startDate.setFullYear(endDate.getFullYear() - 3);
-                break;
-            case '4Y':
-                startDate.setFullYear(endDate.getFullYear() - 4);
-                break;
-            case '5Y':
-                startDate.setFullYear(endDate.getFullYear() - 5);
-                break;
-            case '7Y':
-                startDate.setFullYear(endDate.getFullYear() - 7);
-                break;
-            case '10Y':
-                startDate.setFullYear(endDate.getFullYear() - 10);
-                break;
-            case '20Y':
-                startDate.setFullYear(endDate.getFullYear() - 20);
-                break;
-            case '30Y':
-                startDate.setFullYear(endDate.getFullYear() - 30);
-                break;
-            default:
-                startDate.setFullYear(endDate.getFullYear() - 1);
+        if (period.endsWith('M')) {
+            const months = parseInt(period.replace('M', ''));
+            startDate.setMonth(endDate.getMonth() - months);
+        } else if (period.endsWith('Y')) {
+            const years = parseInt(period.replace('Y', ''));
+            startDate.setFullYear(endDate.getFullYear() - years);
+        } else {
+            // 默认处理
+            startDate.setFullYear(endDate.getFullYear() - 1);
         }
     } else {
         // 指定年份模式：根据起始年份和时间跨度计算起始和结束日期
         const selectedYear = parseInt(startYear);
-        const years = parseInt(period.replace('Y', ''));
-        const calculatedEndYear = selectedYear + years - 1; // 修正：1年跨度应该是同一年，2年跨度是下一年
-        const currentYear = new Date().getFullYear();
-        
-        // 如果选择的是上市年份且有上市日期信息，使用上市日期
+
+        // 设置起始日期
         if (currentStockInfo && currentStockInfo.list_date) {
             const listYear = parseInt(currentStockInfo.list_date.toString().substring(0, 4));
             if (selectedYear === listYear) {
-                // 使用上市日期作为起始日期
                 const listDateStr = currentStockInfo.list_date.toString();
                 startDate = new Date(
                     parseInt(listDateStr.substring(0, 4)),
@@ -263,34 +238,26 @@ function calculateDateRange(period, startYear) {
                     parseInt(listDateStr.substring(6, 8))
                 );
             } else {
-                // 使用选择年份的1月1日
                 startDate = new Date(selectedYear, 0, 1);
             }
         } else {
-            // 没有上市日期信息，使用选择年份的1月1日
             startDate = new Date(selectedYear, 0, 1);
         }
         
-        // 计算结束日期：从起始日期开始计算满跨度时间
-        const tempEndDate = new Date(startDate);
-        tempEndDate.setFullYear(tempEndDate.getFullYear() + years);
+        // 计算结束日期
+        endDate = new Date(startDate);
+        if (period.endsWith('M')) {
+            const months = parseInt(period.replace('M', ''));
+            endDate.setMonth(endDate.getMonth() + months);
+        } else if (period.endsWith('Y')) {
+            const years = parseInt(period.replace('Y', ''));
+            endDate.setFullYear(endDate.getFullYear() + years);
+        }
         
-        // 如果计算出的结束日期超过当前日期，使用当前日期，但确保至少有满跨度数据
+        // 如果计算出的结束日期超过当前日期，使用当前日期
         const currentDate = new Date();
-        if (tempEndDate > currentDate) {
-            // 检查从起始日期到当前日期是否已经满足选择的跨度
-            const fullSpanFromStart = new Date(startDate);
-            fullSpanFromStart.setFullYear(fullSpanFromStart.getFullYear() + years);
-            
-            if (fullSpanFromStart <= currentDate) {
-                // 如果已经满足跨度要求，使用当前日期
-                endDate = currentDate;
-            } else {
-                // 如果不足跨度要求，使用满跨度的日期
-                endDate = fullSpanFromStart;
-            }
-        } else {
-            endDate = tempEndDate;
+        if (endDate > currentDate) {
+            endDate = currentDate;
         }
     }
     

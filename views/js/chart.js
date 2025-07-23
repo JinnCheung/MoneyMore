@@ -65,6 +65,34 @@ function renderChart(dates, klineData, stockInfo, dividendYieldData) {
         backgroundColor: isDark ? '#2d2d2d' : '#fff',
         tooltip: {
             trigger: 'axis',
+            position: function (point, params, dom, rect, size) {
+                // 获取tooltip的实际尺寸和视口尺寸
+                const tooltipWidth = size.contentSize[0];
+                const tooltipHeight = size.contentSize[1];
+                const viewWidth = size.viewSize[0];
+                const viewHeight = size.viewSize[1];
+
+                let x = point[0];
+                let y = point[1];
+
+                // 水平方向边界检测
+                if (x + tooltipWidth > viewWidth) {
+                    x = viewWidth - tooltipWidth - 10; // 留10px边距
+                }
+                if (x < 0) {
+                    x = 10; // 左边距
+                }
+
+                // 垂直方向边界检测
+                if (y + tooltipHeight > viewHeight) {
+                    y = y - tooltipHeight - 20; // 显示在鼠标上方
+                }
+                if (y < 0) {
+                    y = 10; // 顶部边距
+                }
+
+                return [x, y];
+            },
             axisPointer: {
                 type: 'cross'
             },

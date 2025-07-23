@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>股票K线图 - MoneyMore</title>
+    <title>MoneyMore投资策略回测工具</title>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
@@ -14,7 +14,7 @@
     <div class="container">
         <div class="header">
 
-            <div class="subtitle">数据来源：Tushare | 更新时间：<span id="updateTime"></span></div>
+            <div class="subtitle">策略：四进三出｜数据来源：Tushare | 更新时间：<span id="updateTime"></span></div>
         </div>
         
         <div class="controls">
@@ -34,6 +34,9 @@
             <div class="control-group">
                 <label for="periodSelect">时间跨度：</label>
                 <select id="periodSelect">
+                    <option value="3M">3个月</option>
+                    <option value="6M">6个月</option>
+                    <option value="9M">9个月</option>
                     <option value="1Y" selected>1年</option>
                     <option value="2Y">2年</option>
                     <option value="3Y">3年</option>
@@ -74,7 +77,7 @@
                 </div>
             </div>
             <div class="control-group">
-                <label for="tradingSignalsToggle">四进三出：</label>
+                <label for="tradingSignalsToggle">回测：</label>
                 <div class="toggle-switch">
                     <input type="checkbox" id="tradingSignalsToggle" class="toggle-input">
                     <label for="tradingSignalsToggle" class="toggle-label">

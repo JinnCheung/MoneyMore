@@ -293,6 +293,9 @@ function handleKeyNavigation(e) {
             e.preventDefault();
             if (selectedStockIndex >= 0) {
                 selectStock(options[selectedStockIndex]);
+            } else if (options.length === 1) {
+                // 如果搜索结果只有一个，直接选择它
+                selectStock(options[0]);
             }
             break;
         case 'Escape':
