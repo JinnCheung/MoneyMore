@@ -534,8 +534,16 @@ function calculateTradingSignals(dates, stockData) {
         return { buySignals, sellSignals };
     }
     
-    let isHolding = false; // 当前是否持有股票
+    // 计算在当前时间范围开始之前的持仓状态
+    const startDate = new Date(dates[0]);
+    const initialState = calculateInitialHoldingState(startDate);
+    let isHolding = initialState.isHolding;
     let lastBuyIndex = -1; // 最后一次买入的索引
+    
+    if (isHolding) {
+        lastBuyIndex = 0; // 如果已经持仓，设置为当前范围的开始
+        console.log(`📊 在${dates[0]}之前已有持仓，从持仓状态开始计算`);
+    }
     
     for (let i = 0; i < dates.length; i++) {
         const currentDate = new Date(dates[i]);
@@ -548,9 +556,10 @@ function calculateTradingSignals(dates, stockData) {
         const currentPrice = parseFloat(noAdjData.close);
         if (!currentPrice || currentPrice <= 0) continue;
         
-        // 找到当前日期之前最近的年报披露日（用于分红计算）
+        // 找到当前日期之前最近的年报披露日（与tooltip保持一致的逻辑）
         const sortedAnnualEarnings = earningsData
             .filter(e => {
+                // 只筛选年报（end_date以1231结尾）
                 const endDateStr = e.end_date ? e.end_date.toString() : '';
                 if (!endDateStr.endsWith('1231')) return false;
                 
@@ -574,9 +583,11 @@ function calculateTradingSignals(dates, stockData) {
         
         const reportYear = parseInt(latestAnnualEarning.end_date.toString().slice(0, 4));
         const isDisclosureDay = currentDate.toDateString() === disclosureDate.toDateString();
+        
+        // 如果是年报披露日当日，显示前一年分红；否则显示当年分红（与tooltip逻辑一致）
         const dividendYear = isDisclosureDay ? reportYear - 1 : reportYear;
         
-        // 计算当前静态股息率
+        // 查找该年度的所有分红记录，只取状态为"实施"的记录（与tooltip逻辑一致）
         const yearDividends = dividendData.filter(d => {
             if (!d.end_date) return false;
             const endDateStr = d.end_date.toString();
@@ -584,6 +595,7 @@ function calculateTradingSignals(dates, stockData) {
             return endYear === dividendYear && d.div_proc === '实施';
         });
         
+        // 计算累计分红（只计算实施状态的记录，与tooltip逻辑一致）
         const totalDividend = yearDividends.reduce((sum, d) => {
             return sum + (parseFloat(d.cash_div_tax) || 0);
         }, 0);
@@ -649,37 +661,150 @@ function calculateTradingSignals(dates, stockData) {
         }
         
         if (!isHolding) {
-            // 买入条件：连续四年分红 + 扣非增长率≥-10% + 股息率首次达到4%
-            if (consecutiveYears >= 4 && 
-                currentGrowthRate !== null && currentGrowthRate >= -10 && 
-                currentDividendYield >= 4.0) {
+            // 买入条件：连续四年分红 + 扣非增长率≥-10% + 股息率4%波动触发
+            
+            // 检查股息率4%波动触发条件
+            let shouldTriggerBuy = false;
+            if (i > 0) {
+                // 获取前一个交易日的股息率（使用与tooltip一致的逻辑）
+                const prevTradeDateStr = dates[i-1].replace(/-/g, '');
+                const prevNoAdjData = rawStockDataNoAdj.find(d => d.trade_date.toString() === prevTradeDateStr);
+                if (prevNoAdjData) {
+                    const prevPrice = parseFloat(prevNoAdjData.close);
+                    
+                    // 计算前一日的分红数据（使用与tooltip一致的逻辑）
+                    const prevDate = new Date(dates[i-1]);
+                    const prevSortedAnnualEarnings = earningsData
+                        .filter(e => {
+                            const endDateStr = e.end_date ? e.end_date.toString() : '';
+                            if (!endDateStr.endsWith('1231')) return false;
+                            
+                            const disclosureDate = new Date(e.display_date ? 
+                                `${e.display_date.toString().slice(0,4)}-${e.display_date.toString().slice(4,6)}-${e.display_date.toString().slice(6,8)}` :
+                                `${e.ann_date.toString().slice(0,4)}-${e.ann_date.toString().slice(4,6)}-${e.ann_date.toString().slice(6,8)}`);
+                            return disclosureDate <= prevDate;
+                        })
+                        .sort((a, b) => {
+                            const dateA = a.display_date || a.ann_date;
+                            const dateB = b.display_date || b.ann_date;
+                            return dateB - dateA;
+                        });
+                    
+                    let prevDividendYield = 0;
+                    if (prevSortedAnnualEarnings.length > 0) {
+                        const prevLatestAnnualEarning = prevSortedAnnualEarnings[0];
+                        const prevDisclosureDate = new Date(prevLatestAnnualEarning.display_date ? 
+                            `${prevLatestAnnualEarning.display_date.toString().slice(0,4)}-${prevLatestAnnualEarning.display_date.toString().slice(4,6)}-${prevLatestAnnualEarning.display_date.toString().slice(6,8)}` :
+                            `${prevLatestAnnualEarning.ann_date.toString().slice(0,4)}-${prevLatestAnnualEarning.ann_date.toString().slice(4,6)}-${prevLatestAnnualEarning.ann_date.toString().slice(6,8)}`);
+                        
+                        const prevReportYear = parseInt(prevLatestAnnualEarning.end_date.toString().slice(0, 4));
+                        const prevIsDisclosureDay = prevDate.toDateString() === prevDisclosureDate.toDateString();
+                        const prevDividendYear = prevIsDisclosureDay ? prevReportYear - 1 : prevReportYear;
+                        
+                        const prevYearDividends = dividendData.filter(d => {
+                            if (!d.end_date) return false;
+                            const endDateStr = d.end_date.toString();
+                            const endYear = parseInt(endDateStr.slice(0, 4));
+                            return endYear === prevDividendYear && d.div_proc === '实施';
+                        });
+                        
+                        const prevTotalDividend = prevYearDividends.reduce((sum, d) => {
+                            return sum + (parseFloat(d.cash_div_tax) || 0);
+                        }, 0);
+                        
+                        prevDividendYield = prevTotalDividend > 0 ? (prevTotalDividend / prevPrice * 100) : 0;
+                    }
+                    
+                    // 触发条件：(前一日<4% 且 当前日≥4%) 或 (前一日≥4% 且 当前日<4%)
+                    if ((prevDividendYield < 4.0 && currentDividendYield >= 4.0) || 
+                        (prevDividendYield >= 4.0 && currentDividendYield < 4.0)) {
+                        shouldTriggerBuy = true;
+                    }
+                }
+            } else if (currentDividendYield >= 4.0) {
+                // 第一个交易日且股息率≥4%
+                shouldTriggerBuy = true;
+            }
+            
+            // 添加详细调试信息
+            if (dates[i] === '2025-04-01' || shouldTriggerBuy) {
+                console.log(`📊 ${dates[i]} 买入条件检查:`);
+                console.log(`   连续分红年数: ${consecutiveYears} (需要≥4)`);
+                console.log(`   扣非增长率: ${currentGrowthRate}% (需要≥-10%)`);
+                console.log(`   当前股息率: ${currentDividendYield.toFixed(2)}%`);
                 
-                // 检查是否是首次达到4%（避免重复买入）
-                let isFirstTime = true;
                 if (i > 0) {
-                    // 检查前一个交易日的股息率
                     const prevTradeDateStr = dates[i-1].replace(/-/g, '');
                     const prevNoAdjData = rawStockDataNoAdj.find(d => d.trade_date.toString() === prevTradeDateStr);
                     if (prevNoAdjData) {
                         const prevPrice = parseFloat(prevNoAdjData.close);
-                        const prevDividendYield = totalDividend > 0 ? (totalDividend / prevPrice * 100) : 0;
-                        if (prevDividendYield >= 4.0) {
-                            isFirstTime = false;
+                        
+                        // 计算前一日的分红数据（使用与tooltip一致的逻辑）
+                        const prevDate = new Date(dates[i-1]);
+                        const prevSortedAnnualEarnings = earningsData
+                            .filter(e => {
+                                const endDateStr = e.end_date ? e.end_date.toString() : '';
+                                if (!endDateStr.endsWith('1231')) return false;
+                                
+                                const disclosureDate = new Date(e.display_date ? 
+                                    `${e.display_date.toString().slice(0,4)}-${e.display_date.toString().slice(4,6)}-${e.display_date.toString().slice(6,8)}` :
+                                    `${e.ann_date.toString().slice(0,4)}-${e.ann_date.toString().slice(4,6)}-${e.ann_date.toString().slice(6,8)}`);
+                                return disclosureDate <= prevDate;
+                            })
+                            .sort((a, b) => {
+                                const dateA = a.display_date || a.ann_date;
+                                const dateB = b.display_date || b.ann_date;
+                                return dateB - dateA;
+                            });
+                        
+                        let prevDividendYield = 0;
+                        if (prevSortedAnnualEarnings.length > 0) {
+                            const prevLatestAnnualEarning = prevSortedAnnualEarnings[0];
+                            const prevDisclosureDate = new Date(prevLatestAnnualEarning.display_date ? 
+                                `${prevLatestAnnualEarning.display_date.toString().slice(0,4)}-${prevLatestAnnualEarning.display_date.toString().slice(4,6)}-${prevLatestAnnualEarning.display_date.toString().slice(6,8)}` :
+                                `${prevLatestAnnualEarning.ann_date.toString().slice(0,4)}-${prevLatestAnnualEarning.ann_date.toString().slice(4,6)}-${prevLatestAnnualEarning.ann_date.toString().slice(6,8)}`);
+                            
+                            const prevReportYear = parseInt(prevLatestAnnualEarning.end_date.toString().slice(0, 4));
+                            const prevIsDisclosureDay = prevDate.toDateString() === prevDisclosureDate.toDateString();
+                            const prevDividendYear = prevIsDisclosureDay ? prevReportYear - 1 : prevReportYear;
+                            
+                            const prevYearDividends = dividendData.filter(d => {
+                                if (!d.end_date) return false;
+                                const endDateStr = d.end_date.toString();
+                                const endYear = parseInt(endDateStr.slice(0, 4));
+                                return endYear === prevDividendYear && d.div_proc === '实施';
+                            });
+                            
+                            const prevTotalDividend = prevYearDividends.reduce((sum, d) => {
+                                return sum + (parseFloat(d.cash_div_tax) || 0);
+                            }, 0);
+                            
+                            prevDividendYield = prevTotalDividend > 0 ? (prevTotalDividend / prevPrice * 100) : 0;
                         }
+                        
+                        console.log(`   前一日股息率: ${prevDividendYield.toFixed(2)}%`);
+                        console.log(`   4%波动触发: ${shouldTriggerBuy}`);
                     }
                 }
+                console.log(`   持仓状态: ${isHolding}`);
+            }
+            
+            if (consecutiveYears >= 4 && 
+                currentGrowthRate !== null && currentGrowthRate >= -10 && 
+                shouldTriggerBuy) {
                 
-                if (isFirstTime) {
-                    buySignals.push({
-                        date: dates[i],
-                        price: currentPrice,
-                        dividendYield: currentDividendYield,
-                        growthRate: currentGrowthRate,
-                        consecutiveYears: consecutiveYears
-                    });
-                    isHolding = true;
-                    lastBuyIndex = i;
-                }
+                console.log(`🟢 ${dates[i]} 满足买入条件，生成买点`);
+                buySignals.push({
+                    date: dates[i],
+                    price: currentPrice,
+                    dividendYield: currentDividendYield,
+                    growthRate: currentGrowthRate,
+                    consecutiveYears: consecutiveYears
+                });
+                isHolding = true;
+                lastBuyIndex = i;
+            } else if (shouldTriggerBuy) {
+                console.log(`❌ ${dates[i]} 股息率4%波动触发但其他条件不满足，不生成买点`);
             }
         } else {
             // 卖出条件：股息率首次达到3% 或 扣非增长率<-10%
@@ -729,6 +854,193 @@ function calculateTradingSignals(dates, stockData) {
     }
     
     return { buySignals, sellSignals };
+}
+
+// 计算在指定日期之前的持仓状态
+function calculateInitialHoldingState(targetDate) {
+    if (!earningsData || !dividendData || !finaIndicatorData || !rawStockDataNoAdj) {
+        return { isHolding: false };
+    }
+    
+    // 获取目标日期之前的所有交易数据
+    const historicalData = rawStockDataNoAdj.filter(d => {
+        const tradeDate = new Date(
+            `${d.trade_date.toString().slice(0,4)}-${d.trade_date.toString().slice(4,6)}-${d.trade_date.toString().slice(6,8)}`
+        );
+        return tradeDate < targetDate;
+    }).sort((a, b) => a.trade_date - b.trade_date);
+    
+    if (historicalData.length === 0) {
+        return { isHolding: false };
+    }
+    
+    let isHolding = false;
+    
+    // 遍历历史数据，计算买卖点
+    for (let i = 0; i < historicalData.length; i++) {
+        const currentData = historicalData[i];
+        const currentDate = new Date(
+            `${currentData.trade_date.toString().slice(0,4)}-${currentData.trade_date.toString().slice(4,6)}-${currentData.trade_date.toString().slice(6,8)}`
+        );
+        const currentPrice = parseFloat(currentData.close);
+        
+        if (!currentPrice || currentPrice <= 0) continue;
+        
+        // 计算当前日期的财务指标（复用现有逻辑）
+        const tradeDateStr = currentData.trade_date.toString();
+        
+        // 找到当前日期之前最近的年报披露日
+        const sortedAnnualEarnings = earningsData
+            .filter(e => {
+                const endDateStr = e.end_date ? e.end_date.toString() : '';
+                if (!endDateStr.endsWith('1231')) return false;
+                
+                const disclosureDate = new Date(e.display_date ? 
+                    `${e.display_date.toString().slice(0,4)}-${e.display_date.toString().slice(4,6)}-${e.display_date.toString().slice(6,8)}` :
+                    `${e.ann_date.toString().slice(0,4)}-${e.ann_date.toString().slice(4,6)}-${e.ann_date.toString().slice(6,8)}`);
+                return disclosureDate <= currentDate;
+            })
+            .sort((a, b) => {
+                const dateA = a.display_date || a.ann_date;
+                const dateB = b.display_date || b.ann_date;
+                return dateB - dateA;
+            });
+        
+        if (sortedAnnualEarnings.length === 0) continue;
+        
+        const latestAnnualEarning = sortedAnnualEarnings[0];
+        const reportYear = parseInt(latestAnnualEarning.end_date.toString().slice(0, 4));
+        const disclosureDate = new Date(latestAnnualEarning.display_date ? 
+            `${latestAnnualEarning.display_date.toString().slice(0,4)}-${latestAnnualEarning.display_date.toString().slice(4,6)}-${latestAnnualEarning.display_date.toString().slice(6,8)}` :
+            `${latestAnnualEarning.ann_date.toString().slice(0,4)}-${latestAnnualEarning.ann_date.toString().slice(4,6)}-${latestAnnualEarning.ann_date.toString().slice(6,8)}`);
+        const isDisclosureDay = currentDate.toDateString() === disclosureDate.toDateString();
+        const dividendYear = isDisclosureDay ? reportYear - 1 : reportYear;
+        
+        // 计算股息率
+        const yearDividends = dividendData.filter(d => {
+            if (!d.end_date) return false;
+            const endDateStr = d.end_date.toString();
+            const endYear = parseInt(endDateStr.slice(0, 4));
+            return endYear === dividendYear && d.div_proc === '实施';
+        });
+        
+        const totalDividend = yearDividends.reduce((sum, d) => {
+            return sum + (parseFloat(d.cash_div_tax) || 0);
+        }, 0);
+        
+        const currentDividendYield = totalDividend > 0 ? (totalDividend / currentPrice * 100) : 0;
+        
+        // 计算连续分红年数
+        const consecutiveYears = calculateConsecutiveDividendYears(dividendYear, currentDate, earningsData, dividendData);
+        
+        // 获取扣非增长率
+        const sortedEarnings = earningsData
+            .filter(e => {
+                const disclosureDate = new Date(e.display_date ? 
+                    `${e.display_date.toString().slice(0,4)}-${e.display_date.toString().slice(4,6)}-${e.display_date.toString().slice(6,8)}` :
+                    `${e.ann_date.toString().slice(0,4)}-${e.ann_date.toString().slice(4,6)}-${e.ann_date.toString().slice(6,8)}`);
+                return disclosureDate <= currentDate;
+            })
+            .sort((a, b) => {
+                const dateA = a.display_date || a.ann_date;
+                const dateB = b.display_date || b.ann_date;
+                return dateB - dateA;
+            });
+        
+        let currentGrowthRate = null;
+        if (sortedEarnings.length > 0) {
+            const latestEarning = sortedEarnings[0];
+            const reportEndDate = latestEarning.end_date.toString();
+            const isEarningsDisclosureDay = currentDate.toDateString() === new Date(latestEarning.display_date ? 
+                `${latestEarning.display_date.toString().slice(0,4)}-${latestEarning.display_date.toString().slice(4,6)}-${latestEarning.display_date.toString().slice(6,8)}` :
+                `${latestEarning.ann_date.toString().slice(0,4)}-${latestEarning.ann_date.toString().slice(4,6)}-${latestEarning.ann_date.toString().slice(6,8)}`).toDateString();
+            
+            let targetEndDate;
+            if (isEarningsDisclosureDay) {
+                const year = parseInt(reportEndDate.slice(0, 4));
+                const monthDay = reportEndDate.slice(4, 8);
+                switch (monthDay) {
+                    case '0331':
+                        targetEndDate = `${year - 1}1231`;
+                        break;
+                    case '0630':
+                        targetEndDate = `${year}0331`;
+                        break;
+                    case '0930':
+                        targetEndDate = `${year}0630`;
+                        break;
+                    case '1231':
+                        targetEndDate = `${year}0930`;
+                        break;
+                    default:
+                        targetEndDate = reportEndDate;
+                }
+            } else {
+                targetEndDate = reportEndDate;
+            }
+            
+            const finaIndicator = finaIndicatorData.find(f => {
+                return f.end_date && f.end_date.toString() === targetEndDate;
+            });
+            
+            if (finaIndicator && finaIndicator.dt_netprofit_yoy !== null && finaIndicator.dt_netprofit_yoy !== undefined) {
+                currentGrowthRate = parseFloat(finaIndicator.dt_netprofit_yoy);
+            }
+        }
+        
+        // 判断买卖点
+        if (!isHolding) {
+            // 买入条件
+            if (consecutiveYears >= 4 && 
+                currentGrowthRate !== null && currentGrowthRate >= -10 && 
+                currentDividendYield >= 4.0) {
+                
+                // 检查是否是首次达到4%
+                let isFirstTime = true;
+                if (i > 0) {
+                    const prevData = historicalData[i-1];
+                    const prevPrice = parseFloat(prevData.close);
+                    const prevDividendYield = totalDividend > 0 ? (totalDividend / prevPrice * 100) : 0;
+                    if (prevDividendYield >= 4.0) {
+                        isFirstTime = false;
+                    }
+                }
+                
+                if (isFirstTime) {
+                    isHolding = true;
+                }
+            }
+        } else {
+            // 卖出条件
+            let shouldSell = false;
+            
+            if (currentGrowthRate !== null && currentGrowthRate < -10) {
+                shouldSell = true;
+            }
+            
+            if (!shouldSell && currentDividendYield <= 3.0) {
+                let isFirstTime = true;
+                if (i > 0) {
+                    const prevData = historicalData[i-1];
+                    const prevPrice = parseFloat(prevData.close);
+                    const prevDividendYield = totalDividend > 0 ? (totalDividend / prevPrice * 100) : 0;
+                    if (prevDividendYield <= 3.0) {
+                        isFirstTime = false;
+                    }
+                }
+                
+                if (isFirstTime) {
+                    shouldSell = true;
+                }
+            }
+            
+            if (shouldSell) {
+                isHolding = false;
+            }
+        }
+    }
+    
+    return { isHolding };
 }
 
 // 导出函数
