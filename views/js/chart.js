@@ -1,7 +1,7 @@
 // MoneyMore 图表渲染模块
 
 // 渲染带财报标记的图表
-function renderChart(dates, klineData, stockInfo) {
+function renderChart(dates, klineData, stockInfo, dividendYieldData) {
     hideLoading();
     
     // 更新页面主标题为当前股票名称
@@ -468,11 +468,12 @@ function renderChart(dates, klineData, stockInfo) {
             
             // 只有当开关打开时才添加股息率曲线
             if (showDividendYield) {
+                const dividendYieldSeriesData = dividendYieldData ? dividendYieldData.map(d => d ? d.dividendYield : null) : [];
                 seriesArray.push({
                     name: '静态股息率',
                     type: 'line',
                     yAxisIndex: 1,
-                    data: dividendYieldData,
+                    data: dividendYieldSeriesData,
                     lineStyle: {
                         color: '#3498db',
                         width: 2
